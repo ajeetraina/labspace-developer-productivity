@@ -3,23 +3,49 @@ metadata:
   sourceRepo: github.com/${REPO_OWNER}/${REPO_NAME}
   contentVersion: abcd123 # Will be filled in during CI
 
-title: Labspace starter
+title: Docker Developer Productivity — Inner Loop to AI
 description: |
-  A basic template for creating a Labspace, including all of the boilerplate needed to write and publish a Labspace.
+  A hands-on Labspace that takes you through the full inner-loop developer
+  workflow with Docker — from running Postgres containers, through building,
+  testing, and securing a real Product Catalog service, all the way to
+  enhancing it with local AI using Docker Model Runner and the MCP Gateway.
+
+author: Ajeet Singh Raina
 
 sections:
   - title: Introduction
-    contentPath: 01-introduction.md
-  - title: Main Content 1
-    contentPath: 02-main-content.md
+    contentPath: 00-introduction.md
+  - title: "Lab 1 · Running Postgres Containers"
+    contentPath: 01-postgres-containers.md
+  - title: "Lab 2 · Product Catalog Overview"
+    contentPath: 02-product-catalog-overview.md
+  - title: "Lab 3 · Develop"
+    contentPath: 03-develop.md
+  - title: "Lab 4 · Test"
+    contentPath: 04-test.md
+  - title: "Lab 5 · Build"
+    contentPath: 05-build.md
+  - title: "Lab 6 · Secure"
+    contentPath: 06-secure.md
+  - title: "Lab 7 · Catalog + Docker Model Runner"
+    contentPath: 07-model-runner.md
+  - title: "Lab 8 · Catalog + MCP"
+    contentPath: 08-mcp.md
   - title: Conclusion
-    contentPath: 03-conclusion.md
+    contentPath: 09-conclusion.md
 
 # Services are used to add default tabs in the Labspace interface.
-# The IDE will always be present as a service, but you can add additional services as needed.
-# Icon values come from https://fonts.google.com/icons/
+# The IDE is always present. Icons come from https://fonts.google.com/icons/
 services:
   - id: app
-    url: http://localhost:3000
-    title: App
-    icon: anchor
+    url: http://localhost:5173
+    title: Web Client
+    icon: storefront
+  - id: pgadmin
+    url: http://localhost:5050
+    title: pgAdmin
+    icon: database
+  - id: kafka
+    url: http://localhost:8080
+    title: Kafka UI
+    icon: forum

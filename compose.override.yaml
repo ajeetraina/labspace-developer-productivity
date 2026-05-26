@@ -3,19 +3,22 @@ services:
     environment:
       PROJECT_CLONE_URL: https://github.com/${REPO_OWNER}/${REPO_NAME}
 
-  # workspace:
-  #   # Override the default image if desired
-  #   # More details - https://github.com/dockersamples/labspace-infra/blob/main/docs/configuration.md#overriding-the-workspace-image
-  #   image: dockersamples/labspace-workspace-java
-
-  #   # Override the default ports to publish additional ports you may need
-  #   # More details - https://github.com/dockersamples/labspace-infra/blob/main/docs/configuration.md#overriding-the-workspace-ports
-  #   ports: !override
-  #     - "6274:6274" # Expose the MCP inspector users will launch from inside the Labspace
-  #     - "8080:8080" # The port used by the app
-
-  #   # Add other environment variables as needed
-  #   environment:
-  #     DANGEROUSLY_OMIT_AUTH: "true" # Skip auth for the MCP Inspector
+  workspace:
+    # Publish the ports used across the labs so the service tabs and
+    # in-Labspace links resolve correctly.
+    ports: !override
+      - "5173:5173" # Catalog web client / frontend
+      - "5174:5174" # Chatbot UI (Lab 7)
+      - "3000:3000" # Backend API
+      - "3001:3001" # Agent Portal (Labs 7 & 8)
+      - "5050:5050" # pgAdmin
+      - "8080:8080" # Kafka UI
+      - "5432:5432" # PostgreSQL
+      - "9092:9092" # Kafka broker
+      - "4566:4566" # LocalStack (S3)
+      - "8090:8090" # WireMock (mock inventory)
+      - "7777:7777" # Agent Service (Labs 7 & 8)
+      - "8082:8082" # Chatbot API (Lab 7)
+      - "8811:8811" # MCP Gateway (Labs 7 & 8)
 
 # Add other models or services your Labspace may need
