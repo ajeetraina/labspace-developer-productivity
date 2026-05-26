@@ -59,6 +59,7 @@ Open the **pgAdmin** tab at [http://localhost:5050](http://localhost:5050) and c
 You can also check directly from the database container:
 
 ```bash
+cd ~/project/catalog-service-node
 docker compose exec postgres psql -U postgres -c "\c catalog" -c "SELECT * FROM products;"
 ```
 
