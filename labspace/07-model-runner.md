@@ -53,19 +53,41 @@ You can list locally available models at any time:
 docker model ls
 ```
 
-## Step 2 · Start all services
+## Step 2 · Clone the enhanced repo
 
-Clone the enhanced repo and bring everything up:
-
-```bash
-git clone https://github.com/ajeetraina/catalog-service-node-chatbot.git
-```
+Clone the chatbot-enhanced catalog repo. Run this from `~/project` so it sits **alongside** `catalog-service-node`, not nested inside it:
 
 ```bash
-cd catalog-service-node-chatbot && docker compose up -d --build
+cd ~/project && git clone https://github.com/ajeetraina/catalog-service-node-chatbot.git
 ```
 
-## Step 3 · Access the applications
+Move into the project — every command below runs from here:
+
+```bash
+cd catalog-service-node-chatbot
+```
+
+> 📂 If you're running the catalog labs (3–6) in the same session, **stop that stack first** — both stacks publish ports like 5432, 5173, 8080 and 9092, so they can't run at the same time. From the catalog folder: `docker compose down`.
+
+## Step 3 · Create the WireMock files directory
+
+The repo's `compose.yaml` mounts `./wiremock/__files`, but that directory isn't included in the repo — only `wiremock/mappings/` is. Docker can't bind-mount a path that doesn't exist, so **WireMock will fail to start** unless you create it first:
+
+```bash
+mkdir -p wiremock/__files
+```
+
+> 💡 An empty `__files` directory is fine — WireMock only uses it for file-based response bodies, and this repo's stubs are all inline JSON. This step just satisfies the bind mount.
+
+## Step 4 · Start all services
+
+Build and bring up the full stack:
+
+```bash
+docker compose up -d --build
+```
+
+## Step 5 · Access the applications
 
 | Service | URL | Description |
 |---|---|---|
@@ -81,7 +103,7 @@ cd catalog-service-node-chatbot && docker compose up -d --build
 sh add-products.sh
 ```
 
-## Step 4 · Chat with your catalog
+## Step 6 · Chat with your catalog
 
 Open the **Chatbot Interface** at [http://localhost:5174](http://localhost:5174) and try natural-language queries. For example:
 
