@@ -108,15 +108,22 @@ docker compose ps -a
 
 > 💡 If an earlier `up` failed partway (e.g. on the port conflict above), some containers — often the `frontend`, `chatbot-frontend`, and `chatbot-backend` — can be left in **`Created`** state and never started. The UIs won't load until they're `Up`. Just run `docker compose up -d` again; it starts the stranded containers without disturbing the running ones.
 
-## Step 5 · Access the applications
+## Step 5 · Access the application
+
+This lab is about the **Chatbot** powered by Docker Model Runner — that's the one UI you need:
 
 | Service | URL | Description |
 |---|---|---|
-| 🤖 **Chatbot Interface** | [http://localhost:5174](http://localhost:5174) | **Main chatbot for product queries** |
-| 🏠 Main Frontend | [http://localhost:5173](http://localhost:5173) | Product catalog management |
-| 🔧 Agent Portal | [http://localhost:3001](http://localhost:3001) | AI agent management interface |
-| 📊 Kafka UI | [http://localhost:8080](http://localhost:8080) | Event streaming monitoring |
-| 🗄️ pgAdmin | [http://localhost:5050](http://localhost:5050) | Database administration |
+| 🤖 **Chatbot** | [http://localhost:5174](http://localhost:5174) | **The Product Catalog Assistant — this is the lab** |
+
+> 💬 In the Labspace, open the **Chatbot** tab at the top of the interface. It points at port 5174 — the purple "Product Catalog Assistant" chat UI. **Don't** use the *Web Client* tab (port 5173) for this lab; that's a generic catalog frontend, not the chatbot, and it can show a different app if another stack is running.
+
+<details>
+<summary>Optional — other UIs in this stack</summary>
+
+The stack also runs supporting services you can peek at, but they aren't needed to complete the lab: Agent Portal ([3001](http://localhost:3001)), Kafka UI ([8080](http://localhost:8080)), and pgAdmin ([5050](http://localhost:5050)). Note these ports overlap with the Labs 3–6 catalog stack, so they only resolve correctly when this is the only stack running.
+
+</details>
 
 ## Step 6 · Seed the catalog with sample data
 
