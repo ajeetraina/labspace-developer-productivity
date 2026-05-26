@@ -2,9 +2,23 @@
 
 This is where the inner loop really comes alive. You'll bring up the full environment, create products through the web UI, watch them flow into Postgres and Kafka, **discover a bug**, and **fix it live** — all without leaving your containerized environment.
 
+## Clone the application
+
+Labs 3–6 use the **Catalog Service** sample app. Clone it into your workspace:
+
+```bash
+git clone https://github.com/dockersamples/catalog-service-node.git
+```
+
+Then move into the project directory — every command in Labs 3–6 runs from here:
+
+```bash
+cd catalog-service-node
+```
+
 ## Bring up the environment
 
-The project is already cloned into this Labspace. Start all the backing services (Postgres, Kafka, LocalStack, WireMock, pgAdmin, Kafka UI):
+Start all the backing services (Postgres, Kafka, LocalStack, WireMock, pgAdmin, Kafka UI):
 
 ```bash
 docker compose up -d
@@ -16,15 +30,13 @@ Confirm everything is healthy:
 docker compose ps
 ```
 
-> 📝 In a real local setup you'd first clone the repo and run a prep script:
+> 📝 **Optional — workshop demo prep.** If you're running this as a guided demo, the repo includes a prep script that seeds the bug you'll fix below:
 >
 > ```bash no-run-button
-> git clone https://github.com/dockersamples/catalog-service-node
-> cd demo/sdlc-e2e
-> ./setup.sh
+> cd demo/sdlc-e2e && ./setup.sh
 > ```
 >
-> The `setup.sh` script creates a per-participant demo branch, cleans the working tree, pulls the latest code, applies a demo patch, runs `npm install`, and pre-pulls all the container images so the workshop starts instantly. Importantly, the patch **deliberately removes** the `upc: product.upc,` line from `src/services/ProductService.js` — that's the bug you'll fix below.
+> The `setup.sh` script creates a per-participant demo branch, cleans the working tree, pulls the latest code, applies a demo patch, runs `npm install`, and pre-pulls all the container images so the workshop starts instantly. Importantly, the patch **deliberately removes** the `upc: product.upc,` line from `src/services/ProductService.js` — that's the bug you'll fix below. If you skip the script, you can still follow along; just be aware the UPC line may already be present.
 
 ## Start the API service
 
