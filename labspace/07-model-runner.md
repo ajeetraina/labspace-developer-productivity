@@ -39,6 +39,24 @@ This enhanced system layers AI services on top of the catalog you already know:
 - At least **8 GB RAM** (4 GB+ for the AI models)
 - Docker Compose v2.0+
 
+## Step 0 · Start with a clean slate
+
+Labs 1–6 leave containers running that use the **same ports** this AI stack needs (PostgreSQL on 5432, the API on 3000, the web client on 5173, Kafka on 9092, and so on). If any are still up, this lab will fail to start with *"port is already allocated."* Clear them all in one step before you begin:
+
+```bash
+docker rm -f $(docker ps -aq --filter "name=postgres" --filter "name=catalog") 2>/dev/null; echo "Cleaned up."
+```
+
+This removes the standalone Postgres containers from Lab 1 (`postgres1/2/3`) and any catalog stack containers from Labs 3–6. It's safe to run even if nothing is there.
+
+Confirm the key ports are now free — this should print **nothing**:
+
+```bash
+docker ps --format '{{.Names}}: {{.Ports}}' | grep -E '5432|3000|5173|8080|9092'
+```
+
+> 💡 The rule of thumb for this workshop: only one application stack runs at a time. Each lab's app reuses the same ports, so clear the previous one before starting the next.
+
 ## Step 1 · Pull the AI model
 
 Pull the Llama 3.2 model that the chatbot and agents will use:
@@ -67,8 +85,6 @@ Move into the project — every command below runs from here:
 cd catalog-service-node-chatbot
 ```
 
-> 📂 If you're running the catalog labs (3–6) in the same session, **stop that stack first** — both stacks publish ports like 5432, 5173, 8080 and 9092, so they can't run at the same time. From the catalog folder: `docker compose down`.
-
 ## Step 3 · Create the WireMock files directory
 
 The repo's `compose.yaml` mounts `./wiremock/__files`, but that directory isn't included in the repo — only `wiremock/mappings/` is. Docker can't bind-mount a path that doesn't exist, so **WireMock will fail to start** unless you create it first:
@@ -81,32 +97,32 @@ mkdir -p wiremock/__files
 
 ## Step 4 · Start all services
 
-Build and bring up the full stack:
+The backend listens on port 3000, but in a Labspace that port is already taken by the workspace. To keep things simple and conflict-free everywhere, add a tiny override that maps the backend to **3002** on the host. Run this once in the project directory:
+
+```bash
+cat > compose.override.yaml <<'OVERRIDE'
+services:
+  backend:
+    ports: !override
+      - "3002:3000"
+OVERRIDE
+```
+
+> 💡 This is harmless outside a Labspace too — it just means the API is reached at `localhost:3002`. Services still talk to each other internally on `backend:3000`, so the app works the same.
+
+Now build and bring up the full stack:
 
 ```bash
 docker compose up -d --build
 ```
 
-> ⚠️ **Port 3000 already in use?** If `up` fails with *"Bind for 0.0.0.0:3000 failed: port is already allocated,"* something else on your host is using port 3000 — most commonly the **Labspace workspace itself** (it publishes 3000). The backend listens on 3000 *inside* its container; just map it to a free host port instead. Create a `compose.override.yaml` **in this directory**:
->
-> ```bash no-run-button
-> cat > compose.override.yaml <<'OVERRIDE'
-> services:
->   backend:
->     ports: !override
->       - "3002:3000"
-> OVERRIDE
-> ```
->
-> Then re-run `docker compose up -d`. The backend is now reachable on host port `3002` (services still reach each other internally on `backend:3000`, so the app is unaffected).
-
-After `up`, **verify every container is actually running** — not just `Created`:
+Verify every container is actually running — not just `Created`:
 
 ```bash
 docker compose ps -a
 ```
 
-> 💡 If an earlier `up` failed partway (e.g. on the port conflict above), some containers — often the `frontend`, `chatbot-frontend`, and `chatbot-backend` — can be left in **`Created`** state and never started. The UIs won't load until they're `Up`. Just run `docker compose up -d` again; it starts the stranded containers without disturbing the running ones.
+> 💡 If a container is left in **`Created`** state (an earlier start didn't finish), just run `docker compose up -d` again — it starts the stragglers without disturbing the running ones.
 
 ## Step 5 · Access the application
 
