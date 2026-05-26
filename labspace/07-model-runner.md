@@ -87,6 +87,27 @@ Build and bring up the full stack:
 docker compose up -d --build
 ```
 
+> ⚠️ **Port 3000 already in use?** If `up` fails with *"Bind for 0.0.0.0:3000 failed: port is already allocated,"* something else on your host is using port 3000 — most commonly the **Labspace workspace itself** (it publishes 3000). The backend listens on 3000 *inside* its container; just map it to a free host port instead. Create a `compose.override.yaml` **in this directory**:
+>
+> ```bash no-run-button
+> cat > compose.override.yaml <<'OVERRIDE'
+> services:
+>   backend:
+>     ports: !override
+>       - "3002:3000"
+> OVERRIDE
+> ```
+>
+> Then re-run `docker compose up -d`. The backend is now reachable on host port `3002` (services still reach each other internally on `backend:3000`, so the app is unaffected).
+
+After `up`, **verify every container is actually running** — not just `Created`:
+
+```bash
+docker compose ps -a
+```
+
+> 💡 If an earlier `up` failed partway (e.g. on the port conflict above), some containers — often the `frontend`, `chatbot-frontend`, and `chatbot-backend` — can be left in **`Created`** state and never started. The UIs won't load until they're `Up`. Just run `docker compose up -d` again; it starts the stranded containers without disturbing the running ones.
+
 ## Step 5 · Access the applications
 
 | Service | URL | Description |
@@ -97,13 +118,23 @@ docker compose up -d --build
 | 📊 Kafka UI | [http://localhost:8080](http://localhost:8080) | Event streaming monitoring |
 | 🗄️ pgAdmin | [http://localhost:5050](http://localhost:5050) | Database administration |
 
-> 💡 Load sample data first: running `sh add-products.sh` seeds 50+ products so the chatbot has a rich catalog to answer questions about.
+## Step 6 · Seed the catalog with sample data
+
+⚠️ **Do this before chatting.** The catalog starts **empty** — if you ask the chatbot "show me electronics" with no products loaded, it has nothing to answer with. Seed 50+ sample products first:
 
 ```bash
 sh add-products.sh
 ```
 
-## Step 6 · Chat with your catalog
+Confirm the products landed:
+
+```bash
+docker compose exec postgres psql -U postgres -d catalog -c "SELECT count(*) FROM products;"
+```
+
+You should see a non-zero count. Now the chatbot has a real catalog to draw on.
+
+## Step 7 · Chat with your catalog
 
 Open the **Chatbot Interface** at [http://localhost:5174](http://localhost:5174) and try natural-language queries. For example:
 
