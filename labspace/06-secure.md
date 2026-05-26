@@ -2,19 +2,64 @@
 
 A working image isn't necessarily a *safe* image. In this lab you'll use **Docker Scout** to surface vulnerabilities in your image and then fix them — the security half of the inner loop, where you catch CVEs on your laptop instead of in production.
 
+> 📂 The commands below run from inside the project directory. If you've opened a new terminal since Lab 3, `cd catalog-service-node` first.
+
 ## 🔍 What is Docker Scout?
 
 Docker Scout analyzes your image's contents, builds a Software Bill of Materials (SBOM) of every package and dependency, and matches them against known vulnerability databases. Crucially, it doesn't just list problems — it **recommends concrete fixes**, like a newer base image or a patched dependency version.
 
-## Set up a deliberately vulnerable build
+## 🔑 Log in to Docker Hub
 
-To see Scout work, we'll first introduce some known issues. This patch adjusts the `Dockerfile` to use an **older base image** and installs an **older, vulnerable version of Express** — perfect for demonstrating out-of-date base images and vulnerable dependencies:
+Docker Scout needs you to be authenticated to Docker Hub — the `quickview` and `cves` commands talk to Scout's backend, which requires a logged-in Docker account. Log in before running any Scout command:
 
 ```bash
-git apply --whitespace=fix demo/scout.patch
+docker login
 ```
 
-Now build the (intentionally vulnerable) image:
+Enter your own Docker Hub username and a [Personal Access Token](https://app.docker.com/settings/personal-access-tokens) (recommended over your password) when prompted. If you're already logged in, this is a no-op and you can move on.
+
+> 🔒 Type your credentials directly into the `docker login` prompt yourself — never paste them into the lab text or a script. A Personal Access Token is safer than your password and can be revoked anytime.
+
+Confirm Scout sees your account:
+
+```bash
+docker scout version
+```
+
+## Set up a deliberately vulnerable build
+
+To see Scout work, we first need the image in a deliberately **vulnerable** state — an older base image and an out-of-date Express. There are two ways you might already be here:
+
+**Check what you have first:**
+
+```bash
+grep "FROM node" Dockerfile && grep '"express"' package.json
+```
+
+- If you see an **older base** (e.g. `node:18`) and **Express `4.x`**, the vulnerable state is **already applied** — most likely the workshop's `demo/sdlc-e2e/setup.sh` prep script already ran (check with `git status`; you'll be on a `demo-…` branch with modified files). **Skip ahead to "Build the vulnerable image" below.**
+- If you see `node:22-slim` and Express `5.x`, the tree is clean — apply the demo patch to create the vulnerable state:
+
+```bash
+git apply --whitespace=fix demo/sdlc-e2e/demo.patch
+```
+
+> 📂 Run from inside `catalog-service-node`. If that patch path doesn't exist, list what's available: `ls demo/*/demo.patch`. If `git apply` reports *"patch does not apply,"* the changes are already present (the prep script ran) — just continue to the build step.
+
+**Manual fallback** (if neither the patch nor the prep script is available): open the `Dockerfile` and change the base image line to an older release, then pin an older Express in `package.json` and run `npm install`:
+
+```dockerfile no-run-button
+# Dockerfile — change the base image
+FROM node:18 AS base
+```
+
+```json no-run-button
+// package.json — pin an older, vulnerable Express
+"express": "4.17.1",
+```
+
+## Build the vulnerable image
+
+With the vulnerable state in place, build and tag the image:
 
 ```bash
 docker build -t scout:v1.0 .
@@ -34,15 +79,17 @@ Then dig into the detailed CVE list:
 docker scout cves scout:v1.0
 ```
 
-Search the output for the **Express** package. Scout will flag it and tell you the fix is available in **express 4.17.3+**.
+Search the output for the **Express** package. Scout flags it as out of date and tells you the minimum version that resolves the vulnerabilities — note that recommended version, you'll use it next.
 
 ## 🔧 Fix the vulnerable dependency
 
-Open `package.json` in the editor and change the Express version from `4.17.3` to `4.19.2`:
+Open `package.json` in the editor and bump Express to the fixed version Scout recommended. For example, if it currently reads `"express": "^4.17.1"`, raise it to the latest patched 4.x release Scout suggested:
 
 ```json no-run-button
-"express": "4.19.2"
+"express": "^4.21.2",
 ```
+
+> 💡 Use whatever version Scout's `cves` output recommended rather than this exact number — Express releases change over time, and Scout always points you at a currently-patched version.
 
 Reinstall dependencies so the lockfile picks up the new version:
 
