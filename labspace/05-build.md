@@ -69,15 +69,27 @@ You'll see `CACHED` next to the dependency-install layers in the output — only
 
 ## Inspect what you built
 
-Check the image's layer history and size:
+Check the latest image's layer history and size:
 
 ```bash
-docker history catalog-service:v1.0
+docker history catalog-service:v1.1
 ```
 
 ```bash
-docker image inspect catalog-service:v1.0 --format '{{ .Size }}'
+docker image inspect catalog-service:v1.1 --format '{{ .Size }}'
 ```
+
+You can also see both builds side by side and confirm they're almost identical — same layers up to the source-copy step, where `v1.1` diverges because that's the only layer that wasn't cached:
+
+```bash
+docker images catalog-service
+```
+
+```bash
+diff <(docker history --no-trunc catalog-service:v1.0) <(docker history --no-trunc catalog-service:v1.1)
+```
+
+Most rows will match exactly. The only difference is the source-copy layer (and anything that depends on it) — concrete proof that everything *above* it was reused from cache.
 
 Keeping an eye on image size matters: smaller images push, pull, and start faster — and (as you'll see in the next lab) usually carry fewer vulnerabilities.
 
@@ -86,7 +98,7 @@ Keeping an eye on image size matters: smaller images push, pull, and start faste
 Give it a spin to confirm it actually runs:
 
 ```bash
-docker run --rm -p 3000:3000 catalog-service:v1.0
+docker run --rm -p 3000:3000 catalog-service:v1.1
 ```
 
 ## Building with Buildx
