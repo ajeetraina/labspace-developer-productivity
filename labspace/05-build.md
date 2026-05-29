@@ -2,6 +2,8 @@
 
 With your code developed and tested, it's time to package it into a container image. This lab focuses on **building locally** with Docker and BuildKit — no cloud builder required.
 
+> 📂 The commands below run from inside the project directory. If you've opened a new terminal since Lab 3, `cd catalog-service-node` first.
+
 ## Build the image
 
 The project ships with a `Dockerfile`. Build it and give it a tag:
@@ -18,26 +20,46 @@ docker images catalog-service
 
 ## Make builds faster with layer caching
 
-The single biggest inner-loop win when building is **layer caching**. Because Docker caches each instruction's result, dependencies only get re-installed when the files that affect them actually change.
+The single biggest inner-loop win when building is **layer caching**. Docker caches each instruction's result, so dependencies only get re-installed when the files that affect them actually change.
 
-This is why a well-ordered `Dockerfile` copies and installs dependencies *before* copying application source:
+Take a look at the project's `Dockerfile` — **open it in the IDE on the right** (`catalog-service-node/Dockerfile`). You can also print it inline:
 
-```dockerfile no-run-button
-# Dependencies change rarely → cache this layer
-COPY package.json package-lock.json ./
-RUN npm install --omit=dev
-
-# Source changes often → put it after the dependency layer
-COPY . .
+```bash
+cat Dockerfile
 ```
 
-Try it: build once, then change a source file and build again. The dependency-install step is served from cache, so the second build is dramatically faster:
+It's a **multi-stage build** with three stages — `base`, `dev`, and `final` — but the layer-caching principle is the same one you'd see in any well-ordered Dockerfile. Look at what each relevant stage does:
+
+```dockerfile no-run-button no-copy-button
+# --- Stage: base -----------------------------------------------------
+FROM node:18 AS base
+WORKDIR /usr/local/app
+RUN useradd -m appuser && chown -R appuser /usr/local/app
+USER appuser
+COPY --chown=appuser:appuser package.json package-lock.json ./   # ← deps manifest only
+
+# --- Stage: final ----------------------------------------------------
+FROM base AS final
+ENV NODE_ENV production
+RUN npm ci --production --ignore-scripts && npm cache clean --force   # ← install BEFORE source
+COPY ./src ./src                                                       # ← source copied AFTER
+```
+
+Notice the order across the two stages:
+
+1. The **dependency manifest** (`package.json`, `package-lock.json`) is copied in the `base` stage.
+2. The **install step** (`npm ci`) runs in `final`, *before* any source code is brought in.
+3. The **source** (`./src`) is copied *last*.
+
+That ordering is what makes caching work: Docker can reuse the `npm ci` layer as long as the two manifest files haven't changed — even when you edit source code. Splitting it across `base` and `final` also lets the separate `dev` stage reuse the same dependency setup without duplicating it.
+
+Try it: edit any source file (e.g. open `src/services/ProductService.js` in the IDE and add a comment line), then rebuild with a new tag:
 
 ```bash
 docker build -t catalog-service:v1.1 .
 ```
 
-You'll see `CACHED` next to the dependency layers in the build output. 🚀
+You'll see `CACHED` next to the dependency-install layers in the output — only the source-copy and downstream layers actually re-run. The second build is dramatically faster. 🚀
 
 ## Inspect what you built
 
