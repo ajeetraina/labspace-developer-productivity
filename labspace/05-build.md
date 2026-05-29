@@ -1,130 +1,129 @@
 # Lab 5 · Build
 
-With your code developed and tested, it's time to package it into a container image. This lab focuses on **building locally** with Docker and BuildKit — no cloud builder required.
+You've developed and tested your app. Now package it into an image — and watch Docker's layer caching make every rebuild after the first one fast. That speed *is* the inner-loop win.
 
-> 📂 The commands below run from inside the project directory. If you've opened a new terminal since Lab 3, `cd catalog-service-node` first.
+> 📂 Run these from inside the project. If you opened a new terminal since Lab 3, `cd catalog-service-node` first.
 
-## Build the image
+## Step 1 · Build the image
 
-The project ships with a `Dockerfile`. Build it and give it a tag:
+The project ships with a `Dockerfile`. Build it and tag it as `v1.0`:
 
 ```bash
 docker build -t catalog-service:v1.0 .
 ```
 
-BuildKit (the default builder) runs each instruction, caches the layers, and produces a tagged image. List the build you just made — filtering to just the `v1.*` tags so other images on your machine don't clutter the output:
+## Step 2 · List the image
+
+Filter to just the `v1.*` tags so other images on your machine don't clutter the output:
 
 ```bash
 docker images --filter "reference=catalog-service:v1.*"
 ```
 
-## Make builds faster with layer caching
+You'll see one row — your fresh `v1.0` build.
 
-The single biggest inner-loop win when building is **layer caching**. Docker caches each instruction's result, so dependencies only get re-installed when the files that affect them actually change.
+## Step 3 · Edit a source file
 
-Take a look at the project's `Dockerfile` — **open it in the IDE on the right** (`catalog-service-node/Dockerfile`). You can also print it inline:
-
-```bash
-cat Dockerfile
-```
-
-It's a **multi-stage build** with three stages — `base`, `dev`, and `final` — but the layer-caching principle is the same one you'd see in any well-ordered Dockerfile. Look at what each relevant stage does:
-
-```dockerfile no-run-button no-copy-button
-# --- Stage: base -----------------------------------------------------
-FROM node:18 AS base
-WORKDIR /usr/local/app
-RUN useradd -m appuser && chown -R appuser /usr/local/app
-USER appuser
-COPY --chown=appuser:appuser package.json package-lock.json ./   # ← deps manifest only
-
-# --- Stage: final ----------------------------------------------------
-FROM base AS final
-ENV NODE_ENV production
-RUN npm ci --production --ignore-scripts && npm cache clean --force   # ← install BEFORE source
-COPY ./src ./src                                                       # ← source copied AFTER
-```
-
-Notice the order across the two stages:
-
-1. The **dependency manifest** (`package.json`, `package-lock.json`) is copied in the `base` stage.
-2. The **install step** (`npm ci`) runs in `final`, *before* any source code is brought in.
-3. The **source** (`./src`) is copied *last*.
-
-That ordering is what makes caching work: Docker can reuse the `npm ci` layer as long as the two manifest files haven't changed — even when you edit source code. Splitting it across `base` and `final` also lets the separate `dev` stage reuse the same dependency setup without duplicating it.
-
-Try it: open `src/services/ProductService.js` in the IDE and add a comment at the very top of the file:
+Open `src/services/ProductService.js` in the IDE on the right, and add this comment at the very top of the file:
 
 ```javascript no-run-button
 // here's a test file
 ```
 
-Save the file, then rebuild with a new tag:
+**Save the file.** This is the change that'll force one layer to rebuild — everything else will come from cache.
+
+## Step 4 · Rebuild and watch the cache work
+
+Rebuild with a new tag:
 
 ```bash
 docker build -t catalog-service:v1.1 .
 ```
 
-You'll see `CACHED` next to the dependency-install layers in the output — only the source-copy and downstream layers actually re-run. The second build is dramatically faster. 🚀
+Two things to notice in the output:
 
-## Inspect what you built
+- Most steps print **`CACHED`** — Docker reused them from the v1.0 build.
+- The build finishes in **seconds**, not minutes, because only the layers affected by your source edit actually re-ran. 🚀
 
-Check the latest image's layer history and size:
-
-```bash
-docker history catalog-service:v1.1
-```
-
-```bash
-docker image inspect catalog-service:v1.1 --format '{{ .Size }}'
-```
-
-You can also list both builds together — filtering to just the `v1.*` tags so other images on your machine don't clutter the output:
+Confirm by listing both builds:
 
 ```bash
 docker images --filter "reference=catalog-service:v1.*"
 ```
 
-You'll see two rows — `v1.0` and `v1.1` — with **the same size but different image IDs**. That's caching working as designed: the dependency layers were reused (so the cumulative size is identical), but the source-copy layer differs because you edited a file, so the final image gets a new ID.
+Same size, different image IDs. The dependency layers were reused (identical size); the source-copy layer differs because of your edit (new image ID). That's the cache doing its job.
 
-To confirm caching layer by layer, compare the two builds' histories. This `diff` prints only the lines that differ — most lines from `v1.0` are absent from the output because they're identical in `v1.1`:
+## Step 5 · Run it
+
+Start the image and confirm it works:
 
 ```bash
-diff <(docker history --no-trunc catalog-service:v1.0) <(docker history --no-trunc catalog-service:v1.1)
+docker run --rm -p 3002:3000 catalog-service:v1.1
 ```
 
-The only differences you'll see are at the source-copy layer and below — concrete proof that everything *above* it was reused from cache.
+> 💡 The container listens on port 3000 internally; we publish it to **host port 3002** because port 3000 is already used by the Labspace itself. Outside a Labspace, `-p 3000:3000` works fine.
 
-Keeping an eye on image size matters: smaller images push, pull, and start faster — and (as you'll see in the next lab) usually carry fewer vulnerabilities.
-
-## Run your freshly built image
-
-Give it a spin to confirm it actually runs:
+In another terminal, hit the API:
 
 ```bash
-docker run --rm -p 3000:3000 catalog-service:v1.1
+curl http://localhost:3002/api/products
 ```
 
-## Building with Buildx
+When you're done, stop the container with **Ctrl-C** in the first terminal.
 
-`docker buildx` is the extended build interface that powers multi-platform builds, advanced caching, and remote builders. Even locally, it's the modern default. List your builders:
+## ✅ Recap
 
-```bash
+You built an image, edited a source file, rebuilt to see layer caching cut the build to seconds, and ran the result. That tight build-edit-build loop is what makes Docker fast for everyday development. Next, you'll scan that image for vulnerabilities and fix them.
+
+---
+
+<details>
+<summary><strong>Going deeper</strong> — Dockerfile structure, Buildx, and CI</summary>
+
+### Why caching works: the Dockerfile's layer order
+
+Open `Dockerfile` in the IDE (or `cat Dockerfile`). It's a **multi-stage** build with three stages — `base`, `dev`, and `final` — and the relevant pattern is the same one you'd see in any well-ordered Dockerfile:
+
+```dockerfile no-run-button no-copy-button
+# Stage: base ---------------------------------------------------------
+COPY --chown=appuser:appuser package.json package-lock.json ./   # ← deps manifest only
+
+# Stage: final --------------------------------------------------------
+RUN npm ci --production --ignore-scripts && npm cache clean --force   # ← install BEFORE source
+COPY ./src ./src                                                       # ← source copied AFTER
+```
+
+The dependency manifest is copied, then `npm ci` runs, *then* the source is copied. Because the install layer sits above the source layer, Docker reuses it as long as `package.json` and `package-lock.json` haven't changed — which is why your `v1.1` rebuild was instant.
+
+### Looking at layer history
+
+If you want to see exactly which layers got cached and how big each is:
+
+```bash no-run-button
+docker history catalog-service:v1.1
+docker image inspect catalog-service:v1.1 --format '{{ .Size }}'
+```
+
+Image size matters: smaller images push, pull, and start faster — and (next lab) usually carry fewer vulnerabilities.
+
+### Buildx and multi-platform builds
+
+`docker buildx` is the modern build interface — it powers multi-platform builds, advanced caching, and remote builders. List your builders:
+
+```bash no-run-button
 docker buildx ls
 ```
 
-Build a multi-architecture image (for example `amd64` + `arm64`) in one command:
+Build for multiple architectures (e.g. `amd64` + `arm64`) in one command:
 
 ```bash no-run-button
 docker buildx build --platform linux/amd64,linux/arm64 -t catalog-service:multiarch .
 ```
 
-> 💡 **Optional — scaling out builds.** For large teams or heavy CI workloads, **Docker Build Cloud** lets you offload builds to fast, shared remote builders with a persistent cache. It's the same `buildx` interface — you just target a `--driver cloud` builder instead of your local one. It's entirely optional and not needed for this Labspace; everything here builds locally.
+For large teams or heavy CI workloads, **Docker Build Cloud** offloads builds to fast, shared remote builders with a persistent cache — same `buildx` interface, different driver. Optional; not needed for this Labspace.
 
-## Building in CI
+### Building in CI
 
-In a real project, you'd build automatically on every push. The repo includes a **GitHub Actions** workflow that builds the image as part of the outer loop — the same `docker build` you ran here, triggered on each commit, so every change produces a consistent, tested artifact.
+In a real project, you'd build automatically on every push. The repo includes a **GitHub Actions** workflow that runs the same `docker build` on each commit, producing a consistent, tested artifact for the outer loop.
 
-## ✅ Recap
-
-You built the application image locally, saw how layer caching speeds up repeated builds, inspected the result, ran it, and learned how Buildx scales to multi-platform and CI builds. Next, you'll scan that image for vulnerabilities and fix them.
+</details>
