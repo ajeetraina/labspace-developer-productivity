@@ -32,16 +32,17 @@ A microservices system where AI agents evaluate products automatically:
 
 ## Step 0 · Start with a clean slate
 
-Other labs leave containers running on the same ports this stack needs — especially **port 3000** (the API) and **5432** (PostgreSQL). If any are still up, this lab fails with *"port is already allocated."* Clear everything in one pass:
+Other labs leave containers running on the same ports this stack needs — especially **port 5432** (PostgreSQL) and the AI-related stacks from Lab 7. Clear them in one pass:
 
 ```bash
 docker rm -f $(docker ps -aq --filter "name=postgres" --filter "name=catalog-service-node" --filter "name=catalog-service-node-chatbot") 2>/dev/null; \
 docker rm -f postgres1 postgres2 postgres3 2>/dev/null; \
-lsof -ti :3000 | xargs kill -9 2>/dev/null; \
 echo "Cleaned up."
 ```
 
 > 💡 The rule of thumb for this workshop: only one application stack runs at a time. Each lab's app reuses the same ports, so clear the previous one before starting the next.
+>
+> Port 3000 is a special case — inside a Labspace, the workspace itself holds it permanently, and `docker rm` can't free it. That's exactly why Step 2 below remaps the backend off port 3000.
 
 ## Step 1 · Clone and configure
 
