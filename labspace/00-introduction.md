@@ -39,6 +39,7 @@ By the end, you'll have extended this same service with a conversational AI chat
 ## ✅ Prerequisites
 
 - Basic understanding of Docker concepts
+- Docker Desktop for Mac/Windows or Linux
 - Familiarity with Node.js development
 - Comfort with a terminal / command line
 
