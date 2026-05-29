@@ -53,27 +53,9 @@ docker images --filter "reference=catalog-service:v1.*"
 
 Same size, different image IDs. The dependency layers were reused (identical size); the source-copy layer differs because of your edit (new image ID). That's the cache doing its job.
 
-## Step 5 · Run it
-
-Start the image and confirm it works:
-
-```bash
-docker run --rm -p 3002:3000 catalog-service:v1.1
-```
-
-> 💡 The container listens on port 3000 internally; we publish it to **host port 3002** because port 3000 is already used by the Labspace itself. Outside a Labspace, `-p 3000:3000` works fine.
-
-In another terminal, hit the API:
-
-```bash
-curl http://localhost:3002/api/products
-```
-
-When you're done, stop the container with **Ctrl-C** in the first terminal.
-
 ## ✅ Recap
 
-You built an image, edited a source file, rebuilt to see layer caching cut the build to seconds, and ran the result. That tight build-edit-build loop is what makes Docker fast for everyday development. Next, you'll scan that image for vulnerabilities and fix them.
+You built an image, edited a source file, rebuilt to see layer caching cut the build to seconds, and confirmed the cache worked by comparing the two images. That tight build-edit-build loop is what makes Docker fast for everyday development. Next, you'll scan that image for vulnerabilities and fix them.
 
 ---
 
