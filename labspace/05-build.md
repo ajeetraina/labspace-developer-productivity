@@ -12,10 +12,10 @@ The project ships with a `Dockerfile`. Build it and give it a tag:
 docker build -t catalog-service:v1.0 .
 ```
 
-BuildKit (the default builder) runs each instruction, caches the layers, and produces a tagged image. List it:
+BuildKit (the default builder) runs each instruction, caches the layers, and produces a tagged image. List the build you just made — filtering to just the `v1.*` tags so other images on your machine don't clutter the output:
 
 ```bash
-docker images catalog-service
+docker images --filter "reference=catalog-service:v1.*"
 ```
 
 ## Make builds faster with layer caching
