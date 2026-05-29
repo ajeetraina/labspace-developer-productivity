@@ -37,6 +37,7 @@ Key integration test files:
 Unit tests verify individual functions in isolation — fast feedback, no containers:
 
 ```bash
+cd catalog-service-node
 npm run unit-test
 ```
 
