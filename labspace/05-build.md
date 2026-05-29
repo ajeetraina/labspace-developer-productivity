@@ -53,7 +53,13 @@ Notice the order across the two stages:
 
 That ordering is what makes caching work: Docker can reuse the `npm ci` layer as long as the two manifest files haven't changed — even when you edit source code. Splitting it across `base` and `final` also lets the separate `dev` stage reuse the same dependency setup without duplicating it.
 
-Try it: edit any source file (e.g. open `src/services/ProductService.js` in the IDE and add a comment line), then rebuild with a new tag:
+Try it: open `src/services/ProductService.js` in the IDE and add a comment at the very top of the file:
+
+```javascript no-run-button
+// here's a test file
+```
+
+Save the file, then rebuild with a new tag:
 
 ```bash
 docker build -t catalog-service:v1.1 .
