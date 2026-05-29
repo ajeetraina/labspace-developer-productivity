@@ -79,13 +79,15 @@ docker history catalog-service:v1.1
 docker image inspect catalog-service:v1.1 --format '{{ .Size }}'
 ```
 
-You can also list both builds together — same image name, two tags:
+You can also list both builds together — filtering to just the `v1.*` tags so other images on your machine don't clutter the output:
 
 ```bash
-docker images catalog-service
+docker images --filter "reference=catalog-service:v1.*"
 ```
 
-To confirm caching actually happened, compare the two builds' layer histories. This `diff` prints only the lines that differ — most lines from `v1.0` are absent from the output because they're identical in `v1.1`:
+You'll see two rows — `v1.0` and `v1.1` — with **the same size but different image IDs**. That's caching working as designed: the dependency layers were reused (so the cumulative size is identical), but the source-copy layer differs because you edited a file, so the final image gets a new ID.
+
+To confirm caching layer by layer, compare the two builds' histories. This `diff` prints only the lines that differ — most lines from `v1.0` are absent from the output because they're identical in `v1.1`:
 
 ```bash
 diff <(docker history --no-trunc catalog-service:v1.0) <(docker history --no-trunc catalog-service:v1.1)
