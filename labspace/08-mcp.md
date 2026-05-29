@@ -30,6 +30,19 @@ A microservices system where AI agents evaluate products automatically:
 | **Customer Match Agent** | Analyzes customer preferences |
 | **Catalog Management Agent** | Updates and maintains the product catalog |
 
+## Step 0 · Start with a clean slate
+
+Other labs leave containers running on the same ports this stack needs — especially **port 3000** (the API) and **5432** (PostgreSQL). If any are still up, this lab fails with *"port is already allocated."* Clear everything in one pass:
+
+```bash
+docker rm -f $(docker ps -aq --filter "name=postgres" --filter "name=catalog-service-node" --filter "name=catalog-service-node-chatbot") 2>/dev/null; \
+docker rm -f postgres1 postgres2 postgres3 2>/dev/null; \
+lsof -ti :3000 | xargs kill -9 2>/dev/null; \
+echo "Cleaned up."
+```
+
+> 💡 The rule of thumb for this workshop: only one application stack runs at a time. Each lab's app reuses the same ports, so clear the previous one before starting the next.
+
 ## Step 1 · Clone and configure
 
 ```bash
@@ -42,19 +55,44 @@ cd catalog-service-ai-enhanced && cp .env.example .env
 
 > 📝 Edit `.env` to add any API keys the external MCP tools require. The local AI evaluation works without external keys.
 
-## Step 2 · Start the services
+## Step 2 · Map the backend off port 3000
+
+The backend listens on port 3000, but in a Labspace that port is already taken by the workspace itself (which `docker rm` can't remove — it's the Labspace you're working in). Add a small override that maps the backend to host port **3002**, keeping its internal port unchanged:
+
+```bash
+cat > compose.override.yaml <<'OVERRIDE'
+services:
+  backend:
+    ports: !override
+      - "3002:3000"
+OVERRIDE
+```
+
+> 💡 Harmless outside a Labspace too — the API just lives at `localhost:3002`. Services still reach each other internally on `backend:3000`, so the app works the same.
+
+## Step 3 · Start the services
 
 ```bash
 docker compose up -d
 ```
 
-## Step 3 · Access the applications
+Verify every container is `Up` — not just `Created`:
+
+```bash
+docker compose ps -a
+```
+
+> 💡 If a container is left in **`Created`** state (an earlier start didn't finish), just run `docker compose up -d` again — it starts the stragglers without disturbing the running ones.
+
+## Step 4 · Access the applications
+
+> 🌐 **Open these in your own browser**, not the Labspace service tabs at the top. Those tabs serve the catalog stack from Labs 3–6; this AI stack runs separately on its own ports, so reach it directly at the URLs below.
 
 | Service | URL |
 |---|---|
 | Frontend | [http://localhost:5173](http://localhost:5173) |
 | Agent Portal | [http://localhost:3001](http://localhost:3001) |
-| API | [http://localhost:3000](http://localhost:3000) |
+| API | [http://localhost:3002](http://localhost:3002) |
 | pgAdmin | [http://localhost:5050](http://localhost:5050) |
 | Kafka UI | [http://localhost:8080](http://localhost:8080) |
 
@@ -116,7 +154,7 @@ The agent returns a structured decision:
 }
 ```
 
-## Step 4 · Submit a product
+## Step 5 · Submit a product
 
 Open the **Frontend** at [http://localhost:5173](http://localhost:5173) and submit a product for evaluation:
 
@@ -128,7 +166,7 @@ Price: 249.0
 Category: Electronics
 ```
 
-## Step 5 · Watch the agents work
+## Step 6 · Watch the agents work
 
 Follow the agent service logs to watch the evaluation happen in real time:
 
