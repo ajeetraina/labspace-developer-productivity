@@ -46,15 +46,23 @@ echo "Cleaned up."
 
 ## Step 1 · Clone and configure
 
+Clone into `~/project` — the Labspace only allows bind-mounts from paths under that directory, so cloning anywhere else (like `~/`) will cause Docker to refuse WireMock's mapping mount later with *"Mounting … is not allowed"*:
+
 ```bash
-git clone https://github.com/ajeetraina/catalog-service-ai-enhanced.git
+cd ~/project && git clone https://github.com/ajeetraina/catalog-service-ai-enhanced.git
 ```
 
 ```bash
 cd catalog-service-ai-enhanced && cp .env.example .env
 ```
 
+```bash
+mkdir -p wiremock/__files
+```
+
 > 📝 Edit `.env` to add any API keys the external MCP tools require. The local AI evaluation works without external keys.
+>
+> The `mkdir` step matters because the repo ships `wiremock/mappings/` but not `wiremock/__files/` — Docker can't bind-mount a path that doesn't exist, so creating the empty directory now saves a failed `up` later.
 
 ## Step 2 · Map the backend off port 3000
 
