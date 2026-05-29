@@ -79,17 +79,19 @@ docker history catalog-service:v1.1
 docker image inspect catalog-service:v1.1 --format '{{ .Size }}'
 ```
 
-You can also see both builds side by side and confirm they're almost identical — same layers up to the source-copy step, where `v1.1` diverges because that's the only layer that wasn't cached:
+You can also list both builds together — same image name, two tags:
 
 ```bash
 docker images catalog-service
 ```
 
+To confirm caching actually happened, compare the two builds' layer histories. This `diff` prints only the lines that differ — most lines from `v1.0` are absent from the output because they're identical in `v1.1`:
+
 ```bash
 diff <(docker history --no-trunc catalog-service:v1.0) <(docker history --no-trunc catalog-service:v1.1)
 ```
 
-Most rows will match exactly. The only difference is the source-copy layer (and anything that depends on it) — concrete proof that everything *above* it was reused from cache.
+The only differences you'll see are at the source-copy layer and below — concrete proof that everything *above* it was reused from cache.
 
 Keeping an eye on image size matters: smaller images push, pull, and start faster — and (as you'll see in the next lab) usually carry fewer vulnerabilities.
 
