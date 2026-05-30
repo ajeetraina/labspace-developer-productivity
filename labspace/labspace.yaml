@@ -42,7 +42,7 @@ services:
     title: Web Client
     icon: storefront
   - id: pgadmin
-    url: http://localhost:5050
+    url: http://localhost:5050/browser
     title: pgAdmin
     icon: database
   - id: kafka
