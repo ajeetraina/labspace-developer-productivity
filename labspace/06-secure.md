@@ -4,29 +4,102 @@
 > Image Vulnerabilities · Supply Chain Integrity · Runtime Attack Surface · Compliance
 
 You've built and tagged a working image. Now make it production-ready: surface its
-vulnerabilities and shrink the attack surface through **five container security
-best practices**. Each one is a real, measurable improvement — by the end of the
-lab the same app ships with a fraction of the CVEs, a fraction of the size, and
-a fraction of the privileges.
+vulnerabilities and shrink the attack surface through **container security
+best practices**, ending in a full migration to **Docker Hardened Images (DHI)**.
+Each step is a real, measurable improvement — by the end of the lab the same app
+ships with a fraction of the CVEs, a fraction of the size, and a fraction of the
+privileges.
 
-> 📂 Run these from inside the project. If you opened a new terminal since Lab 3, `cd catalog-service-node` first. Some commands also use Docker Scout, which requires a Docker Hub login — run `docker login` once before the first `docker scout` command.
+---
+
+## Setup
+
+### 1. Docker org setup
+
+::variableDefinition[org]{prompt="What is your Docker Organization?"}
+
+### 2. DHI tier selection
+
+DHI offers both a **free tier** and a **paid tier**.
+
+- **Free tier** — images at the `dhi.io` registry, no Docker Hub subscription needed
+- **Paid tier** — images mirrored into your org on Docker Hub
+
+> **How to choose?** Use the free tier unless you have a paid plan and have the
+> `dhi.io/node` image mirrored in your organization.
+
+::variableSetButton[Use the free tier]{variables="tier=free,dhiPrefix=dhi.io/"}
+
+::variableSetButton[Use the paid tier ($$org$$)]{variables="tier=paid,dhiPrefix=$$org$$/dhi-"}
+
+### 3. Docker login
+
+```bash
+docker login
+```
+
+:::conditionalDisplay{variable="tier" requiredValue="free"}
+
+Also log in to the `dhi.io` registry:
+
+```bash
+docker login dhi.io
+```
+
+:::
+
+### 4. Configure Docker Scout organization
+
+```bash
+docker scout config organization $$org$$
+```
+
+### 5. Clone and bootstrap the project
+
+The setup script applies a patch that deliberately introduces a vulnerable state —
+old base image and downgraded dependencies — so we can demonstrate the full security
+journey from the bottom up.
+
+```bash
+git clone https://github.com/dockersamples/catalog-service-node
+```
+
+```bash
+cd catalog-service-node && ./demo/sdlc-e2e/setup.sh
+```
+
+```bash
+docker rm $(docker ps -a -q) -f 2>/dev/null; clear
+```
+
+```bash
+npm install
+```
+
+Pre-build the initial image so Scout has something to analyse:
+
+```bash
+docker build -t catalog-service --sbom=true --provenance=mode=max .
+```
+
+> 💡 This Lab 6 setup starts you from a fresh clone. Anything you built in Lab 5 (`catalog-service:v1.0`, `:v1.1`) is preserved in your image store but the working tree is reset. The lab refers to the image you just built as `catalog-service` (the implicit `:latest`).
 
 ---
 
 ## Demo #1 · Surface the problem
 
-After Lab 5 you have `catalog-service:v1.1`. If you followed Lab 3's `setup.sh` step, the Dockerfile was patched to `FROM node:18` — a deliberately old base that gives us a realistic "legacy app" starting point. Let's measure where it stands.
+You just built `catalog-service` from the patched `FROM node:18` Dockerfile — a deliberately old base that gives us a realistic "legacy app" starting point. Let's measure where it stands.
 
 Quick vulnerability overview:
 
 ```bash
-docker scout quickview catalog-service:v1.1
+docker scout quickview catalog-service
 ```
 
 Your output will look something like this:
 
 ```none no-copy-button
- Target             │  catalog-service:v1.1  │    3C   111H   131M   233L    20?
+ Target             │  catalog-service  │    3C   111H   131M   233L    20?
    digest           │  377cfda812cc          │
  Base image         │  node:18               │    3C   110H   128M   233L    20?
  Updated base image │  node:26-slim          │    1C     4H     5M    23L
@@ -40,7 +113,7 @@ That bottom row is the punchline. By **just changing one `FROM` line** — `node
 Now the policy view:
 
 ```bash
-docker scout policy catalog-service:v1.1
+docker scout policy catalog-service
 ```
 
 ```none no-copy-button
@@ -433,7 +506,7 @@ docker scout cves catalog-service:slim --only-severity critical,high
 ```bash
 docker scout compare \
     --ignore-unchanged \
-    --to catalog-service:v1.1 \
+    --to catalog-service \
     catalog-service:slim
 ```
 
@@ -475,10 +548,185 @@ you even think to scan.
 
 ---
 
+## Demo #7 · The proactive answer — Docker Hardened Images
+
+> **Start secure.** DHI images are purpose-built from the ground up to be extremely
+> minimal — not stripped-down versions of something bloated. The goal isn't fewer
+> CVEs to triage; it's nothing to triage in the first place.
+
+Every demo so far has been *reactive* — find a problem, fix a problem. DHI flips it: pick a base that doesn't have problems to begin with.
+
+### DHI variants
+
+| Variant | Tag pattern | Use case |
+|---------|-------------|----------|
+| Dev | `$$dhiPrefix$$node:24-debian13-dev` | Building — has shell, npm |
+| Runtime | `$$dhiPrefix$$node:24-debian13` | Production — distroless, no shell |
+
+Because the runtime variant has no shell or `npm`, we use **multi-stage builds**: the dev image installs dependencies, the runtime image gets only the output.
+
+### Update the Dockerfile
+
+Open `catalog-service-node/Dockerfile` in the IDE and replace its contents with this:
+
+```dockerfile no-run-button
+###########################################################
+# Stage: base (DHI dev variant — has shell + npm for builds)
+###########################################################
+FROM $$dhiPrefix$$node:24-debian13-dev AS base
+
+WORKDIR /usr/local/app
+COPY package.json package-lock.json ./
+
+###########################################################
+# Stage: dev
+###########################################################
+FROM base AS dev
+ENV NODE_ENV=development
+RUN npm install
+CMD ["yarn", "dev-container"]
+
+###########################################################
+# Stage: production-dependencies
+###########################################################
+FROM base AS production-dependencies
+ENV NODE_ENV=production
+RUN npm ci --production --ignore-scripts && npm cache clean --force
+
+###########################################################
+# Stage: final (DHI runtime — distroless, no shell)
+###########################################################
+FROM $$dhiPrefix$$node:24-debian13 AS final
+ENV NODE_ENV=production
+COPY --from=production-dependencies /usr/local/app/node_modules ./node_modules
+COPY ./src ./src
+EXPOSE 3000
+CMD ["node", "src/index.js"]
+```
+
+Conceptually the change is:
+
+```diff no-run-button no-copy-button
+- FROM node:26-slim AS base
++ FROM $$dhiPrefix$$node:24-debian13-dev AS base   # build stage
++ FROM $$dhiPrefix$$node:24-debian13 AS final      # runtime — distroless, no shell
+```
+
+Save the file.
+
+### Build the DHI version
+
+```bash
+docker build -t catalog-service:dhi --sbom=true --provenance=mode=max .
+```
+
+### Compare all three images
+
+```bash
+docker images --filter "reference=catalog-service"
+```
+
+```none no-copy-button
+IMAGE                    ID             DISK USAGE   CONTENT SIZE
+catalog-service:dhi      ac3a0d465de4        191MB         40.3MB
+catalog-service:latest   48806e62b871       1.62GB          413MB
+catalog-service:slim     8d03cef7a79f        368MB         84.1MB
+```
+
+DHI is ~10× smaller than the `node:18` baseline and ~2× smaller than slim.
+
+### Scout quickview — every policy green
+
+```bash
+docker scout quickview catalog-service:dhi
+```
+
+```none no-copy-button
+Target     │  catalog-service:dhi  │    0C     0H     0M     0L
+
+Policy status  SUCCEEDED  (7/7 policies met)
+
+  Status │                              Policy                              │  Results
+─────────┼──────────────────────────────────────────────────────────────────┼──────────
+  ✓      │ Default non-root user                                            │
+  ✓      │ No AGPL v3 licenses                                              │
+  ✓      │ No fixable critical or high vulnerabilities                      │
+  ✓      │ No high-profile vulnerabilities                                  │
+  ✓      │ No unapproved base images                                        │
+  ✓      │ Supply chain attestations                                        │
+  ✓      │ No outdated base images                                          │
+```
+
+**7/7 policies met.** Up from 1/7 at the start.
+
+### Full before/after comparison
+
+```bash
+docker scout compare \
+    --ignore-unchanged \
+    --to catalog-service \
+    catalog-service:dhi
+```
+
+Expected (your numbers will vary):
+
+```none no-copy-button
+  vulnerabilities │  0C  0H  0M  0L   │  3C  111H  131M  233L  20?
+  size            │  40 MB (-358 MB)   │  398 MB
+  packages        │  211 (-595)        │  806
+```
+
+- **595 packages removed** — 595 fewer potential CVE vectors
+- **All critical and high CVEs eliminated**
+- Image is **~10× smaller**
+
+### The no-shell demo
+
+Because the DHI runtime is distroless, an attacker who gains code execution **cannot drop to a shell**:
+
+```bash
+docker run --rm catalog-service:dhi sh
+```
+
+Expected: error — `sh` does not exist in the image. There is no shell to drop into, no `cat /etc/passwd`, no `wget && bash`. The only thing in the image is `node` and your application code.
+
+Compare to slim, where `sh` is present:
+
+```bash
+docker run --rm catalog-service:slim sh -c "echo 'shell available — attack surface'"
+```
+
+### DHI vs slim — property comparison
+
+| Property | `node:26-slim` | DHI runtime |
+|----------|---------------|-------------|
+| CVEs (critical/high) | 1C 5H | 0C 0H |
+| Package count | ~272 | ~12 |
+| Shell in runtime | Yes (`sh`) | No (distroless) |
+| Non-root by default | Manual | Built-in |
+| SBOM | Build-time only | Cryptographically signed |
+| VEX document | No | Yes |
+| SLSA provenance | Build-time only | Verified |
+| FIPS variant | No | Yes (`-fips` tag) |
+| STIG variant | No | Yes |
+| 7-day CVE SLA | No | Yes |
+
+Slim was a massive improvement over the legacy base. DHI is a massive improvement over slim — different *category* of base image, not just a different point on the same axis.
+
+---
+
 ## ✅ Recap
 
-You watched a real app go from **3 critical and 110 high CVEs on the `node:18` base** down to **1 critical and 5 high** on the slim image — a 95% reduction in highs without changing a line of application code. Then you ran that image with the runtime hardened: non-root, read-only filesystem, dropped capabilities. And you saw how to bake continuous scanning into CI so the same posture holds for every commit.
+You watched a real app go from **3 critical and 110 high CVEs** on the `node:18` base, down to **1 critical and 5 high** on the slim image, and finally to **0 critical, 0 high — 7/7 policies green** on Docker Hardened Images. All without changing a line of application code. Along the way you hardened the runtime with non-root, read-only filesystem, and dropped capabilities, and saw how to bake continuous scanning into CI so the posture holds for every commit.
 
-Five practices, one app, measurable wins each time.
+The journey, in one row each:
 
-> 🚀 **What's next** — there are three more security best practices and a full **Docker Hardened Images (DHI)** migration story (signed SBOMs, VEX, FIPS, SLSA provenance) covered in the dedicated *Container Security* labspace at [github.com/ajeetraina/labspace-container-security](https://github.com/ajeetraina/labspace-container-security). If this lab clicked, that's where you go deeper.
+| Stage | CVEs (C/H/M/L) | Policies | Size |
+|---|---|---|---|
+| `node:18` (start) | 3 / 110 / 128 / 233 | 1/7 | ~400 MB |
+| `node:26-slim` | 1 / 5 / 7 / 23 | 3/7 | ~85 MB |
+| DHI runtime | 0 / 0 / 0 / 0 | 7/7 | ~40 MB |
+
+Five best practices plus a full DHI migration, one app, measurable wins each step.
+
+> 🚀 **Want to go further** — the full DHI attestations story (signed SBOMs, VEX, FIPS, SLSA provenance, scanner integration) is covered in the dedicated *Container Security* labspace at [github.com/ajeetraina/labspace-container-security](https://github.com/ajeetraina/labspace-container-security).
