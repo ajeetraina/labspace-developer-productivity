@@ -134,6 +134,8 @@ This lab is about the **Chatbot** powered by Docker Model Runner — that's the 
 
 > 💬 In the Labspace, open the **Chatbot** tab at the top of the interface. It points at port 5174 — the purple "Product Catalog Assistant" chat UI. **Don't** use the *Web Client* tab (port 5173) for this lab; that's a generic catalog frontend, not the chatbot, and it can show a different app if another stack is running.
 
+Right now, it doesn't display any data as no product has been added.
+
 <details>
 <summary>Optional — other UIs in this stack</summary>
 
