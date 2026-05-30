@@ -152,7 +152,7 @@ sh add-products.sh
 Confirm the products landed:
 
 ```bash
-docker compose exec postgres psql -U postgres -d catalog -c "SELECT count(*) FROM products;"
+docker compose exec postgres psql -U postgres -d catalog_db -c "SELECT count(*) FROM products;"
 ```
 
 You should see a non-zero count. Now the chatbot has a real catalog to draw on.
