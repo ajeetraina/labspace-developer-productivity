@@ -563,7 +563,7 @@ Open `catalog-service-node/Dockerfile` in the IDE and replace its contents with 
 ###########################################################
 # Stage: base (DHI dev variant — has shell + npm for builds)
 ###########################################################
-FROM $$dhiPrefix$$node:24-debian13-dev AS base
+FROM $$dhiPrefix$$node:25-debian13-dev AS base
 
 WORKDIR /usr/local/app
 COPY package.json package-lock.json ./
@@ -586,7 +586,7 @@ RUN npm ci --production --ignore-scripts && npm cache clean --force
 ###########################################################
 # Stage: final (DHI runtime — distroless, no shell)
 ###########################################################
-FROM $$dhiPrefix$$node:24-debian13 AS final
+FROM $$dhiPrefix$$node:25-debian13 AS final
 ENV NODE_ENV=production
 COPY --from=production-dependencies /usr/local/app/node_modules ./node_modules
 COPY ./src ./src
@@ -598,8 +598,8 @@ Conceptually the change is:
 
 ```diff no-run-button no-copy-button
 - FROM node:26-slim AS base
-+ FROM $$dhiPrefix$$node:24-debian13-dev AS base   # build stage
-+ FROM $$dhiPrefix$$node:24-debian13 AS final      # runtime — distroless, no shell
++ FROM $$dhiPrefix$$node:25-debian13-dev AS base   # build stage
++ FROM $$dhiPrefix$$node:25-debian13 AS final      # runtime — distroless, no shell
 ```
 
 Save the file.
