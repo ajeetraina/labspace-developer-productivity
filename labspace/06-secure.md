@@ -15,7 +15,7 @@ a fraction of the privileges.
 
 ## Demo #1 · Surface the problem
 
-After Lab 5 you have `catalog-service:v1.1` from the `node:18` base. Let's measure the cost.
+After Lab 5 you have `catalog-service:v1.1`. If you followed Lab 3's `setup.sh` step, the Dockerfile was patched to `FROM node:18` — a deliberately old base that gives us a realistic "legacy app" starting point. Let's measure where it stands.
 
 Quick vulnerability overview:
 
@@ -23,18 +23,19 @@ Quick vulnerability overview:
 docker scout quickview catalog-service:v1.1
 ```
 
-Expected output (approximate):
+Your output will look something like this:
 
 ```none no-copy-button
-  Target             │  catalog-service:v1.1  │    2C    26H    25M   122L     4?
-    digest           │  360db4f00cbd          │
-  Base image         │  node:18               │    2C    26H    25M   122L     4?
-  Updated base image │  node:25-slim          │    0C     1H     2M    24L
-                     │                        │    -2    -25    -23    -98     -4
+ Target             │  catalog-service:v1.1  │    3C   111H   131M   233L    20?
+   digest           │  377cfda812cc          │
+ Base image         │  node:18               │    3C   110H   128M   233L    20?
+ Updated base image │  node:26-slim          │    1C     4H     5M    23L
+                    │                        │    -2   -106   -123   -210    -20
 ```
 
-Scout is already pointing at the answer: one `FROM` line change eliminates
-**2 critical and 25 high** CVEs immediately.
+That bottom row is the punchline. By **just changing one `FROM` line** — `node:18` → `node:26-slim` — you'd eliminate **2 critical, 106 high, 123 medium, 210 low** vulnerabilities. No code changes, no rebuilds beyond the new base, no waiting for upstream fixes.
+
+> 💡 The exact CVE counts will drift over time — new vulnerabilities are disclosed daily against `node:18`. The relative shape (huge CVE count on the old base → small one on slim) is the durable lesson.
 
 Now the policy view:
 
@@ -43,24 +44,38 @@ docker scout policy catalog-service:v1.1
 ```
 
 ```none no-copy-button
-Policy status  FAILED  (4/7 policies met)
+Policy status  FAILED  (1/7 policies met, 2 missing data)
 
-  Status │                     Policy                     │           Results
-─────────┼────────────────────────────────────────────────┼──────────────────────────────
-  ✓      │ Default non-root user                          │
-  !      │ AGPL v3 licenses found                         │    3 packages
-  !      │ Fixable critical or high vulnerabilities found │    2C    26H     0M     0L
-  ✓      │ No high-profile vulnerabilities                │
-  ✓      │ No outdated base images                        │
-  !      │ Unapproved base images found                   │    1 deviation
-  ✓      │ Supply chain attestations                      │    0 deviations
+ Status │                     Policy                     │           Results
+────────┼────────────────────────────────────────────────┼─────────────────────────────
+ ✓      │ Default non-root user                          │
+ !      │ AGPL v3 licenses found                         │    4 packages
+ !      │ Fixable critical or high vulnerabilities found │    2C    92H     0M     0L
+ !      │ High-profile vulnerabilities found             │    0C     1H     0M     0L
+ ?      │ No outdated base images                        │    No data
+ ?      │ No unapproved base images                      │    No data
+ !      │ Missing supply chain attestation(s)            │    1 deviation
 ```
 
-4/7 policies failing. This is the **reactive "scan and fix" cycle** — developers
-spend three days researching fixes, rebuild, still have 189 vulnerabilities
-remaining, cycle repeats, security blocks deployment.
+Only **1 of 7 policies passing.** The image has a high-profile CVE, 92 fixable highs, AGPL v3 licenses, and is missing supply-chain attestations.
 
-Let's fix this proactively, one best practice at a time.
+Scroll down in the same `docker scout policy` output and you'll see Scout drill into each failing policy — naming exact packages and the **exact fix version** for every CVE. For example:
+
+```none no-copy-button
+## "No fixable critical or high vulnerabilities" policy evaluation results
+
+ Vulnerability  │  Severity  │  Current package version          │  Fix version
+────────────────┼────────────┼───────────────────────────────────┼──────────────────────
+ CVE-2025-49796 │  CRITICAL  │ libxml2@2.9.14+dfsg-1.3~deb12u1   │ 2.9.14+dfsg-1.3~deb12u3
+ CVE-2025-49794 │  CRITICAL  │ libxml2@2.9.14+dfsg-1.3~deb12u1   │ 2.9.14+dfsg-1.3~deb12u3
+ CVE-2024-21538 │    HIGH    │ cross-spawn@7.0.3                 │ 7.0.5
+ CVE-2025-64756 │    HIGH    │ glob@10.4.2                       │ 11.1.0
+ ...
+```
+
+That's actionable signal, not noise — it's a **fix list**, not just a verdict. But trying to patch 92 individual packages would be a multi-day slog. This is the **reactive "scan and fix" trap**: developers spend three days researching individual CVEs, rebuild, find another wave waiting, security blocks deployment.
+
+Let's fix it proactively, one best practice at a time.
 
 ---
 
@@ -68,38 +83,37 @@ Let's fix this proactively, one best practice at a time.
 
 > **Less OS surface = fewer CVEs = smaller attack window.**
 
-The comparison at a glance:
+Scout already showed you the upgrade path in Demo #1 — `node:18` → `node:26-slim` eliminates **2 critical and 106 high** CVEs. Let's do the swap and see it for real.
 
-| Image | Size | Packages | CVEs |
-|-------|------|----------|------|
-| `node:25` (full) | 1.63 GB | 693 | 242 |
-| `node:lts-slim` | 344 MB | ~272 | 34 |
-| `node:25-slim` | 322 MB | 272 | 30 |
-| `node:alpine` | 239 MB | ~150 | 34 |
-
-Open `catalog-service-node/Dockerfile` in the IDE on the right, and change line 8 — the `base` stage's `FROM`:
+Open `catalog-service-node/Dockerfile` in the IDE on the right and change line 8 (the `base` stage's `FROM`):
 
 ```diff no-run-button no-copy-button
 - FROM node:18 AS base
-+ FROM node:25-slim AS base
++ FROM node:26-slim AS base
 ```
 
-Save the file. Then rebuild and re-scan:
+Save the file. Then rebuild with a new tag:
 
 ```bash
-docker build -t catalog-service:slim --sbom=true --provenance=mode=max .
+docker build -t catalog-service:slim .
 ```
+
+List your images side by side:
 
 ```bash
 docker images --filter "reference=catalog-service"
 ```
 
+Expected — `slim` is dramatically smaller:
+
 ```none no-copy-button
 IMAGE                    ID             DISK USAGE   CONTENT SIZE
 catalog-service:v1.0     48806e62b871       1.62GB          413MB
 catalog-service:v1.1     d56cedd39a9a       1.62GB          413MB
-catalog-service:slim     8d03cef7a79f        368MB         84.1MB
+catalog-service:slim     8d03cef7a79f        368MB         ~85MB
 ```
+
+Now rescan:
 
 ```bash
 docker scout quickview catalog-service:slim
@@ -107,10 +121,21 @@ docker scout quickview catalog-service:slim
 
 ```none no-copy-button
   Target             │  catalog-service:slim  │    0C     2H     2M    24L
-  Base image         │  node:25-slim          │    0C     1H     2M    24L
+  Base image         │  node:26-slim          │    0C     1H     2M    24L
 ```
 
-One `FROM` change: **2 critical eliminated, 25 high eliminated, image 4× smaller.**
+**Zero critical. Two high.** From `3C / 110H / 128M / 233L` down to `0C / 2H / 2M / 24L` with a one-line `FROM` change. Image is ~4× smaller. Same app, same code, fundamentally different security posture.
+
+The comparison at a glance (these numbers drift as new CVEs are disclosed, but the *shape* is consistent):
+
+| Image | Approx. size | Approx. packages | Approx. CVEs |
+|-------|--------------|------------------|--------------|
+| `node:18` (legacy full) | 940 MB | 700+ | 380+ |
+| `node:26` (current full) | 1.1 GB | 690+ | 200+ |
+| `node:26-slim` | 240 MB | 270 | 30-50 |
+| `node:26-alpine` | 220 MB | 150 | 30-40 |
+
+> 💡 **Want to push further?** Distroless and Docker Hardened Images (DHI) take this idea to its logical end — sometimes a single application binary with no shell, no package manager, no OS. Out of scope here; covered in the dedicated [container-security labspace](https://github.com/ajeetraina/labspace-container-security).
 
 ---
 
@@ -132,7 +157,7 @@ One `FROM` change: **2 critical eliminated, 25 high eliminated, image 4× smalle
 Open `catalog-service-node/Dockerfile`. It already uses three stages:
 
 ```none no-copy-button
-FROM node:25-slim AS base     ← shared foundation
+FROM node:26-slim AS base     ← shared foundation
   └─ FROM base AS dev          ← installs ALL deps + dev tools
   └─ FROM base AS final        ← npm ci --production only
 ```
@@ -425,7 +450,7 @@ you even think to scan.
 
 ## ✅ Recap
 
-You watched a real app go from **2 critical and 26 high CVEs on the `node:18` base** to a smaller, hardened image with the critical and high vulnerabilities eliminated — without changing a line of application code. Then you ran that image with the runtime hardened: non-root, read-only filesystem, dropped capabilities. And you saw how to bake continuous scanning into CI so the same posture holds for every commit.
+You watched a real app go from **3 critical and 110 high CVEs on the `node:18` base** down to **0 critical and 2 high** on the slim image — without changing a line of application code. Then you ran that image with the runtime hardened: non-root, read-only filesystem, dropped capabilities. And you saw how to bake continuous scanning into CI so the same posture holds for every commit.
 
 Five practices, one app, measurable wins each time.
 
