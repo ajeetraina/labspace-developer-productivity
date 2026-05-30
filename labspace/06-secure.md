@@ -120,11 +120,38 @@ docker scout quickview catalog-service:slim
 ```
 
 ```none no-copy-button
-  Target             │  catalog-service:slim  │    0C     2H     2M    24L
-  Base image         │  node:26-slim          │    0C     1H     2M    24L
+ Target     │  catalog-service:slim  │    1C     5H     7M    23L
+   digest   │  48d658793446          │
+ Base image │  node:26-slim          │    1C     4H     5M    23L
 ```
 
-**Zero critical. Two high.** From `3C / 110H / 128M / 233L` down to `0C / 2H / 2M / 24L` with a one-line `FROM` change. Image is ~4× smaller. Same app, same code, fundamentally different security posture.
+From `3C / 110H / 128M / 233L` down to `1C / 5H / 7M / 23L` with a one-line `FROM` change. The critical count went from 3 to 1, highs from 110 to 5 — a 95% reduction in highs without touching a line of application code. Image is ~4× smaller, same app, fundamentally different security posture.
+
+And the policy view tells the same story:
+
+```bash
+docker scout policy catalog-service:slim
+```
+
+```none no-copy-button
+Policy status  FAILED  (3/7 policies met, 2 missing data)
+
+ Status │                     Policy                     │           Results
+────────┼────────────────────────────────────────────────┼─────────────────────────────
+ ✓      │ Default non-root user                          │
+ ✓      │ No AGPL v3 licenses                            │    0 packages
+ !      │ Fixable critical or high vulnerabilities found │    0C     1H     0M     0L
+ ✓      │ No high-profile vulnerabilities                │    0C     0H     0M     0L
+ ?      │ No outdated base images                        │    No data
+ ?      │ No unapproved base images                      │    No data
+ !      │ Missing supply chain attestation(s)            │    1 deviation
+```
+
+You went from **1/7 to 3/7 policies passing** with a single `FROM` change. AGPL v3 violations are gone (the slim base doesn't include `libwmf` and friends). The high-profile vulnerability is gone (the slim base ships a newer `git`).
+
+> 💡 **Total vs fixable — read both numbers.** Quickview shows `1C 5H` total CVEs, but the policy view's *"Fixable critical or high"* row shows `0C 1H`. The gap is **unfixable CVEs** — known issues that don't have an upstream patch yet. Only the *fixable* ones are actionable today; the rest are tracked and re-evaluated as upstream maintainers publish patches. That's why continuous scanning (Demo #6) matters: fixes land continuously, your image inherits them on the next rebuild.
+
+The remaining two policy failures — one fixable high and missing supply-chain attestations — are addressable by Demo #6 (continuous scanning) and adding `--sbom=true --provenance=mode=max` to your build, respectively.
 
 The comparison at a glance (these numbers drift as new CVEs are disclosed, but the *shape* is consistent):
 
@@ -450,7 +477,7 @@ you even think to scan.
 
 ## ✅ Recap
 
-You watched a real app go from **3 critical and 110 high CVEs on the `node:18` base** down to **0 critical and 2 high** on the slim image — without changing a line of application code. Then you ran that image with the runtime hardened: non-root, read-only filesystem, dropped capabilities. And you saw how to bake continuous scanning into CI so the same posture holds for every commit.
+You watched a real app go from **3 critical and 110 high CVEs on the `node:18` base** down to **1 critical and 5 high** on the slim image — a 95% reduction in highs without changing a line of application code. Then you ran that image with the runtime hardened: non-root, read-only filesystem, dropped capabilities. And you saw how to bake continuous scanning into CI so the same posture holds for every commit.
 
 Five practices, one app, measurable wins each time.
 
