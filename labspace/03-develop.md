@@ -43,6 +43,7 @@ docker compose ps
 With the dependencies running, start the application itself in dev mode (live reload is enabled):
 
 ```bash
+cd ../../
 npm install
 ```
 
