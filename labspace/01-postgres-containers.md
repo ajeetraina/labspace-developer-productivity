@@ -73,6 +73,8 @@ You'll see the three default databases that ship with a fresh Postgres install:
 (3 rows)
 ```
 
+Press 'q' to exit from the last prompt.
+
 ## Listing all schemas — `\dn`
 
 The `\dn` command lists the database schemas:
