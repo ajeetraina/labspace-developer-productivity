@@ -57,8 +57,8 @@ The connection flags mean:
 
 At the `postgres=#` prompt, list every database:
 
-```text no-run-button
-postgres=# \l
+```bash
+\l
 ```
 
 You'll see the three default databases that ship with a fresh Postgres install:
@@ -77,8 +77,8 @@ You'll see the three default databases that ship with a fresh Postgres install:
 
 The `\dn` command lists the database schemas:
 
-```text no-run-button
-postgres=# \dn
+```bash
+\dn
 ```
 
 ```text no-run-button no-copy-button
@@ -93,8 +93,8 @@ postgres=# \dn
 
 Postgres exposes a live view of what every connection is doing through the `pg_stat_activity` system view. Run the query (**don't forget the trailing `;`**):
 
-```text no-run-button
-postgres=# SELECT * FROM pg_stat_activity;
+```bash
+SELECT * FROM pg_stat_activity;
 ```
 
 The result shows one row per backend process — the PID, the user, the client, the current `state` (`idle` / `active`), the wait event, and the actual `query` text. This is your first line of insight when a database "feels slow": you can see exactly which queries are running and which are blocked.
@@ -109,7 +109,7 @@ The result shows one row per backend process — the PID, the user, the client, 
 
 Exit the `psql` session when you're done:
 
-```text no-run-button
+```bash
 postgres=# \q
 ```
 
