@@ -14,6 +14,16 @@ privileges.
 
 ## Setup
 
+This lab assumes you've followed Labs 3 to 5 in order, so you already have `catalog-service-node` cloned, `setup.sh` applied (which patched the Dockerfile to `FROM node:18`), and `catalog-service:v1.1` built. The setup below adds only what's new for Lab 6 — Docker login, Scout org config, and a DHI tier choice for Demo #7.
+
+> 📂 If you skipped Labs 3 to 5 and have no `catalog-service-node` clone yet, run this first to get to the same starting point:
+>
+> ```bash
+> cd ~/project && git clone https://github.com/dockersamples/catalog-service-node && \
+>   cd catalog-service-node && ./demo/sdlc-e2e/setup.sh && npm install && \
+>   docker build -t catalog-service:v1.1 .
+> ```
+
 ### 1. Docker org setup
 
 ::variableDefinition[org]{prompt="What is your Docker Organization?"}
@@ -40,7 +50,7 @@ docker login
 
 :::conditionalDisplay{variable="tier" requiredValue="free"}
 
-Also log in to the `dhi.io` registry:
+Also log in to the `dhi.io` registry so you can pull the DHI images in Demo #7:
 
 ```bash
 docker login dhi.io
@@ -54,52 +64,32 @@ docker login dhi.io
 docker scout config organization $$org$$
 ```
 
-### 5. Clone and bootstrap the project
+### 5. Confirm your starting state
 
-The setup script applies a patch that deliberately introduces a vulnerable state —
-old base image and downgraded dependencies — so we can demonstrate the full security
-journey from the bottom up.
+Make sure you're in the project directory and the Dockerfile is on `FROM node:18` (the state `setup.sh` produced):
 
 ```bash
-git clone https://github.com/dockersamples/catalog-service-node
+cd ~/project/catalog-service-node && grep '^FROM' Dockerfile
 ```
 
-```bash
-cd catalog-service-node && ./demo/sdlc-e2e/setup.sh
-```
-
-```bash
-docker rm $(docker ps -a -q) -f 2>/dev/null; clear
-```
-
-```bash
-npm install
-```
-
-Pre-build the initial image so Scout has something to analyse:
-
-```bash
-docker build -t catalog-service --sbom=true --provenance=mode=max .
-```
-
-> 💡 This Lab 6 setup starts you from a fresh clone. Anything you built in Lab 5 (`catalog-service:v1.0`, `:v1.1`) is preserved in your image store but the working tree is reset. The lab refers to the image you just built as `catalog-service` (the implicit `:latest`).
+You should see `FROM node:18 AS base`. If you see `node:22-slim` or `node:26-slim`, the patch didn't apply (or you've already done part of Lab 6 in a previous session) — run `./demo/sdlc-e2e/setup.sh` again to reset.
 
 ---
 
 ## Demo #1 · Surface the problem
 
-You just built `catalog-service` from the patched `FROM node:18` Dockerfile — a deliberately old base that gives us a realistic "legacy app" starting point. Let's measure where it stands.
+You're working with `catalog-service:v1.1` from Lab 5 — built from the patched `FROM node:18` Dockerfile — a deliberately old base that gives us a realistic "legacy app" starting point. Let's measure where it stands.
 
 Quick vulnerability overview:
 
 ```bash
-docker scout quickview catalog-service
+docker scout quickview catalog-service:v1.1
 ```
 
 Your output will look something like this:
 
 ```none no-copy-button
- Target             │  catalog-service  │    3C   111H   131M   233L    20?
+ Target             │  catalog-service:v1.1  │    3C   111H   131M   233L    20?
    digest           │  377cfda812cc          │
  Base image         │  node:18               │    3C   110H   128M   233L    20?
  Updated base image │  node:26-slim          │    1C     4H     5M    23L
@@ -113,7 +103,7 @@ That bottom row is the punchline. By **just changing one `FROM` line** — `node
 Now the policy view:
 
 ```bash
-docker scout policy catalog-service
+docker scout policy catalog-service:v1.1
 ```
 
 ```none no-copy-button
