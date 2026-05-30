@@ -1,137 +1,432 @@
 # Lab 6 · Secure
 
-A working image isn't necessarily a *safe* image. In this lab you'll use **Docker Scout** to surface vulnerabilities in your image and then fix them — the security half of the inner loop, where you catch CVEs on your laptop instead of in production.
+> **The four attack vectors that keep production teams up at night:**
+> Image Vulnerabilities · Supply Chain Integrity · Runtime Attack Surface · Compliance
 
-> 📂 The commands below run from inside the project directory. If you've opened a new terminal since Lab 3, `cd catalog-service-node` first.
+You've built and tagged a working image. Now make it production-ready: surface its
+vulnerabilities and shrink the attack surface through **five container security
+best practices**. Each one is a real, measurable improvement — by the end of the
+lab the same app ships with a fraction of the CVEs, a fraction of the size, and
+a fraction of the privileges.
 
-## 🔍 What is Docker Scout?
+> 📂 Run these from inside the project. If you opened a new terminal since Lab 3, `cd catalog-service-node` first. Some commands also use Docker Scout, which requires a Docker Hub login — run `docker login` once before the first `docker scout` command.
 
-Docker Scout analyzes your image's contents, builds a Software Bill of Materials (SBOM) of every package and dependency, and matches them against known vulnerability databases. Crucially, it doesn't just list problems — it **recommends concrete fixes**, like a newer base image or a patched dependency version.
+---
 
-## 🔑 Log in to Docker Hub
+## Demo #1 · Surface the problem
 
-Docker Scout needs you to be authenticated to Docker Hub — the `quickview` and `cves` commands talk to Scout's backend, which requires a logged-in Docker account. Log in before running any Scout command:
+After Lab 5 you have `catalog-service:v1.1` from the `node:18` base. Let's measure the cost.
 
-```bash
-docker login
-```
-
-Enter your own Docker Hub username and a [Personal Access Token](https://app.docker.com/settings/personal-access-tokens) (recommended over your password) when prompted. If you're already logged in, this is a no-op and you can move on.
-
-> 🔒 Type your credentials directly into the `docker login` prompt yourself — never paste them into the lab text or a script. A Personal Access Token is safer than your password and can be revoked anytime.
-
-Confirm Scout sees your account:
+Quick vulnerability overview:
 
 ```bash
-docker scout version
+docker scout quickview catalog-service:v1.1
 ```
 
-## Set up a deliberately vulnerable build
+Expected output (approximate):
 
-To see Scout work, we first need the image in a deliberately **vulnerable** state — an older base image and an out-of-date Express. There are two ways you might already be here:
+```none no-copy-button
+  Target             │  catalog-service:v1.1  │    2C    26H    25M   122L     4?
+    digest           │  360db4f00cbd          │
+  Base image         │  node:18               │    2C    26H    25M   122L     4?
+  Updated base image │  node:25-slim          │    0C     1H     2M    24L
+                     │                        │    -2    -25    -23    -98     -4
+```
 
-**Check what you have first:**
+Scout is already pointing at the answer: one `FROM` line change eliminates
+**2 critical and 25 high** CVEs immediately.
+
+Now the policy view:
 
 ```bash
-grep "FROM node" Dockerfile && grep '"express"' package.json
+docker scout policy catalog-service:v1.1
 ```
 
-- If you see an **older base** (e.g. `node:18`) and **Express `4.x`**, the vulnerable state is **already applied** — most likely the workshop's `demo/sdlc-e2e/setup.sh` prep script already ran (check with `git status`; you'll be on a `demo-…` branch with modified files). **Skip ahead to "Build the vulnerable image" below.**
-- If you see `node:22-slim` and Express `5.x`, the tree is clean — apply the demo patch to create the vulnerable state:
+```none no-copy-button
+Policy status  FAILED  (4/7 policies met)
+
+  Status │                     Policy                     │           Results
+─────────┼────────────────────────────────────────────────┼──────────────────────────────
+  ✓      │ Default non-root user                          │
+  !      │ AGPL v3 licenses found                         │    3 packages
+  !      │ Fixable critical or high vulnerabilities found │    2C    26H     0M     0L
+  ✓      │ No high-profile vulnerabilities                │
+  ✓      │ No outdated base images                        │
+  !      │ Unapproved base images found                   │    1 deviation
+  ✓      │ Supply chain attestations                      │    0 deviations
+```
+
+4/7 policies failing. This is the **reactive "scan and fix" cycle** — developers
+spend three days researching fixes, rebuild, still have 189 vulnerabilities
+remaining, cycle repeats, security blocks deployment.
+
+Let's fix this proactively, one best practice at a time.
+
+---
+
+## Demo #2 · BP#1 — Minimal base images
+
+> **Less OS surface = fewer CVEs = smaller attack window.**
+
+The comparison at a glance:
+
+| Image | Size | Packages | CVEs |
+|-------|------|----------|------|
+| `node:25` (full) | 1.63 GB | 693 | 242 |
+| `node:lts-slim` | 344 MB | ~272 | 34 |
+| `node:25-slim` | 322 MB | 272 | 30 |
+| `node:alpine` | 239 MB | ~150 | 34 |
+
+Open `catalog-service-node/Dockerfile` in the IDE on the right, and change line 8 — the `base` stage's `FROM`:
+
+```diff no-run-button no-copy-button
+- FROM node:18 AS base
++ FROM node:25-slim AS base
+```
+
+Save the file. Then rebuild and re-scan:
 
 ```bash
-git apply --whitespace=fix demo/sdlc-e2e/demo.patch
+docker build -t catalog-service:slim --sbom=true --provenance=mode=max .
 ```
-
-> 📂 Run from inside `catalog-service-node`. If that patch path doesn't exist, list what's available: `ls demo/*/demo.patch`. If `git apply` reports *"patch does not apply,"* the changes are already present (the prep script ran) — just continue to the build step.
-
-**Manual fallback** (if neither the patch nor the prep script is available): open the `Dockerfile` and change the base image line to an older release, then pin an older Express in `package.json` and run `npm install`:
-
-```dockerfile no-run-button
-# Dockerfile — change the base image
-FROM node:18 AS base
-```
-
-```json no-run-button
-// package.json — pin an older, vulnerable Express
-"express": "4.17.1",
-```
-
-## Build the vulnerable image
-
-With the vulnerable state in place, build and tag the image:
 
 ```bash
-docker build -t scout:v1.0 .
+docker images --filter "reference=catalog-service"
 ```
 
-## Analyze the image with Scout
-
-Get a quick vulnerability overview:
+```none no-copy-button
+IMAGE                    ID             DISK USAGE   CONTENT SIZE
+catalog-service:v1.0     48806e62b871       1.62GB          413MB
+catalog-service:v1.1     d56cedd39a9a       1.62GB          413MB
+catalog-service:slim     8d03cef7a79f        368MB         84.1MB
+```
 
 ```bash
-docker scout quickview scout:v1.0
+docker scout quickview catalog-service:slim
 ```
 
-Then dig into the detailed CVE list:
+```none no-copy-button
+  Target             │  catalog-service:slim  │    0C     2H     2M    24L
+  Base image         │  node:25-slim          │    0C     1H     2M    24L
+```
+
+One `FROM` change: **2 critical eliminated, 25 high eliminated, image 4× smaller.**
+
+---
+
+## Demo #3 · BP#2 — Multi-stage builds
+
+> **Dev tools, compilers, and test frameworks stay out of production.**
+
+### What must NOT ship to production
+
+- Source code (after copy/compile)
+- IDE tooling and editors
+- Compilers and build tools
+- Debuggers
+- `npm install` full set (includes devDependencies)
+- Non-deployable build artifacts
+
+### Examine the Dockerfile structure
+
+Open `catalog-service-node/Dockerfile`. It already uses three stages:
+
+```none no-copy-button
+FROM node:25-slim AS base     ← shared foundation
+  └─ FROM base AS dev          ← installs ALL deps + dev tools
+  └─ FROM base AS final        ← npm ci --production only
+```
+
+The critical production line:
+
+```dockerfile no-run-button no-copy-button
+RUN npm ci --production --ignore-scripts && npm cache clean --force
+```
+
+- `--production` — only production dependencies, devDeps excluded
+- `--ignore-scripts` — no post-install scripts (a common supply chain attack vector)
+- `npm cache clean --force` — removes cache from the layer, shrinks image
+
+### Build specific stages
+
+Dev stage only:
 
 ```bash
-docker scout cves scout:v1.0
+docker build -t catalog-service:dev --target dev .
 ```
 
-Search the output for the **Express** package. Scout flags it as out of date and tells you the minimum version that resolves the vulnerabilities — note that recommended version, you'll use it next.
-
-## 🔧 Fix the vulnerable dependency
-
-Open `package.json` in the editor and bump Express to the fixed version Scout recommended. For example, if it currently reads `"express": "^4.17.1"`, raise it to the latest patched 4.x release Scout suggested:
-
-```json no-run-button
-"express": "^4.21.2",
-```
-
-> 💡 Use whatever version Scout's `cves` output recommended rather than this exact number — Express releases change over time, and Scout always points you at a currently-patched version.
-
-Reinstall dependencies so the lockfile picks up the new version:
+Production stage only:
 
 ```bash
-npm install
+docker build -t catalog-service:prod --target final .
 ```
-
-Rebuild as a new tag so you can compare before and after:
 
 ```bash
-docker build -t scout:v2.0 .
+docker images --filter "reference=catalog-service"
 ```
 
-## ✅ Verify the fix
+The `dev` image is larger (all devDependencies). The `prod` image is lean —
+smaller attack surface, faster pulls.
 
-Re-scan the new image:
+### Why `--ignore-scripts` matters
 
 ```bash
-docker scout cves scout:v2.0
+docker scout cves catalog-service:prod --only-severity critical,high
 ```
 
-You'll notice the **High (H)** and **Critical (C)** vulnerabilities tied to the old Express version are gone. 🎉
+Post-install scripts are a well-known supply chain attack vector (the `node-ipc`
+incident in 2022 exploited this). `--ignore-scripts` prevents them from running
+during `npm ci`.
 
-## Compare the two images directly
+---
 
-One of Scout's most useful features is a side-by-side comparison. See exactly what changed between your vulnerable and fixed builds:
+## Demo #4 · BP#3 — Non-root user
+
+> **Root inside a container is effectively root on the host if isolation fails.**
+
+By default, Docker containers run as `root` (UID 0). If an attacker exploits your
+app, they get root-level access inside the container — and potentially on the host
+if the container is misconfigured or running with a privileged socket.
+
+### Three ways to enforce non-root
+
+**Option A — In the Dockerfile (recommended, what we already have).** Open `catalog-service-node/Dockerfile` and look at line 12:
+
+```dockerfile no-run-button no-copy-button
+RUN useradd -m appuser && chown -R appuser /usr/local/app
+USER appuser
+```
+
+**Option B — At `docker run` time:**
 
 ```bash
-docker scout compare scout:v2.0 --to scout:v1.0
+docker run --rm --user 1000:1000 catalog-service:slim \
+    node -e "console.log(process.getuid())"
 ```
 
-This is the kind of evidence you can drop straight into a pull request: "this change removes N critical and M high CVEs."
+Expected output: `1000` — not `0`.
 
-## 💡 Two approaches to image security
+**Option C — In `docker compose`:**
 
-- **Reactive** — scan images you've already built (what you just did with Scout) and remediate findings. Great for catching regressions and continuously monitoring images you ship.
-- **Proactive** — start from a minimal, already-hardened base so there's far less to fix in the first place. This is the idea behind **Docker Hardened Images (DHI)** — slim, secure-by-default base images with built-in attestations.
+```yaml no-run-button no-copy-button
+services:
+  catalog:
+    build: .
+    user: "${CURRENT_UID}"
+```
 
-The strongest workflow combines both: build on a hardened base, *and* keep scanning with Scout so new CVEs in your dependencies never slip through.
+### Verify the running user
+
+```bash
+docker run --rm catalog-service:slim whoami
+```
+
+Expected: `appuser` — not `root`.
+
+### The hardened `docker init` pattern
+
+When you run `docker init` in a new project, Docker scaffolds this automatically:
+
+```dockerfile no-run-button no-copy-button
+ARG UID=10001
+RUN adduser \
+    --disabled-password \
+    --gecos "" \
+    --home "/nonexistent" \
+    --shell "/sbin/nologin" \
+    --no-create-home \
+    --uid "${UID}" \
+    appuser
+USER appuser
+```
+
+Extra hardening: no home directory, no login shell, no password — minimal footprint.
+
+### Confirm Scout policy
+
+```bash
+docker scout quickview catalog-service:slim
+```
+
+Look for `Default non-root user` — should show ✓.
+
+---
+
+## Demo #5 · BP#4 — Read-only filesystem + drop Linux capabilities
+
+> **Even if an attacker gains code execution, a read-only container with dropped capabilities severely limits what they can do next.**
+
+### Linux capabilities — what gets dropped with `--cap-drop=ALL`
+
+| Capability | What it allows |
+|------------|----------------|
+| `CHOWN` | Change file UIDs/GIDs |
+| `DAC_OVERRIDE` | Bypass file read/write/execute permission checks |
+| `NET_RAW` | Raw and packet sockets (used in some network attacks) |
+| `SETUID` / `SETGID` | Change process UID/GID |
+| `SYS_CHROOT` | `chroot()` — change root directory |
+| `KILL` | Send signals to other processes |
+| `MKNOD` | Create special files |
+
+### Step 1 · Clean up any leftover containers
+
+Run this first. It removes any containers from a previous attempt so names and ports are free:
+
+```bash
+docker rm -f catalog-hardened catalog-hardened-tmpfs 2>/dev/null; echo "clean"
+```
+
+### Step 2 · Run with hardened flags
+
+```bash
+docker run \
+    -d \
+    -p 3100:3000 \
+    --read-only \
+    --cap-drop=ALL \
+    --user=65532 \
+    --name catalog-hardened \
+    catalog-service:slim
+```
+
+```bash
+docker ps --filter name=catalog-hardened
+```
+
+```bash
+curl http://localhost:3100
+```
+
+### Step 3 · Verify the filesystem is read-only
+
+```bash
+docker exec catalog-hardened sh -c "echo test > /tmp/test.txt"
+```
+
+Expected: `sh: /tmp/test.txt: Read-only file system`
+
+The attacker gained code execution but **cannot write anywhere** — no dropping
+payloads, no modifying config files, no creating SUID binaries.
+
+### Step 4 · Prove the capability drop
+
+```bash
+docker inspect catalog-hardened \
+    --format 'ReadonlyRootfs={{.HostConfig.ReadonlyRootfs}} CapDrop={{.HostConfig.CapDrop}}'
+```
+
+Expected:
+
+```none no-copy-button
+ReadonlyRootfs=true CapDrop=[ALL]
+```
+
+### Step 5 · When your app needs a writable area — use `tmpfs`
+
+`tmpfs` is in-memory only — writable but never persisted to disk, gone when the
+container stops:
+
+```bash
+docker run \
+    -d \
+    -p 3101:3000 \
+    --read-only \
+    --tmpfs /tmp:noexec,nosuid,size=64m \
+    --cap-drop=ALL \
+    --user=65532 \
+    --name catalog-hardened-tmpfs \
+    catalog-service:slim
+```
+
+```bash
+docker exec catalog-hardened-tmpfs sh -c "echo test > /tmp/test.txt && cat /tmp/test.txt"
+```
+
+`/tmp` is writable in memory. Everything else is still read-only.
+
+The extra `tmpfs` flags matter:
+- `noexec` — files in `/tmp` cannot be executed
+- `nosuid` — SUID bits on files in `/tmp` are ignored
+- `size=64m` — caps memory usage to 64 MB
+
+### Step 6 · Clean up
+
+```bash
+docker rm -f catalog-hardened catalog-hardened-tmpfs
+```
+
+---
+
+## Demo #6 · BP#5 — Scan continuously, not just at build
+
+> **New CVEs are disclosed every day against images you built months ago.**
+> Scanning must happen throughout the entire SDLC — at code, build, registry push, and in production.
+
+### The three Scout commands you'll actually use
+
+**Quickview — fast summary:**
+
+```bash
+docker scout quickview catalog-service:slim
+```
+
+**CVE drill-down — critical and high only:**
+
+```bash
+docker scout cves catalog-service:slim --only-severity critical,high
+```
+
+**Compare — see exactly what changed between two images:**
+
+```bash
+docker scout compare \
+    --ignore-unchanged \
+    --to catalog-service:v1.1 \
+    catalog-service:slim
+```
+
+The `compare` output shows exactly which packages were added/removed/changed and
+which CVEs were introduced or eliminated — actionable signal, not just noise.
+
+### Recommendations — base image upgrade path
+
+```bash
+docker scout recommendations catalog-service:slim
+```
+
+Scout shows the exact upgrade tag that resolves remaining CVEs, along with how many
+vulnerabilities each candidate eliminates.
+
+### Integrate Scout into CI
+
+The repo includes a GitHub Actions workflow at `catalog-service-node/.github/workflows/pipeline-docker-cloud.yaml` that runs Scout on every build. The key gate step:
+
+```yaml no-run-button no-copy-button
+- name: Docker Scout CVEs
+  uses: docker/scout-action@v1
+  with:
+    command: cves
+    image: ${{ steps.build.outputs.imageid }}
+    only-severities: critical,high
+    exit-code: true
+```
+
+`exit-code: true` makes the pipeline **fail** if critical or high CVEs are found —
+the gate that prevents vulnerable images from reaching production.
+
+### Background SBOM indexing in Docker Desktop
+
+Enable via **Settings → General → Enable background Scout SBOM indexing**.
+
+Scout continuously analyses every image you pull or build — you get alerts before
+you even think to scan.
+
+---
 
 ## ✅ Recap
 
-You introduced known vulnerabilities, found them with Docker Scout, fixed a vulnerable Express dependency, and verified the High and Critical CVEs were eliminated — then compared the two images to prove it. That completes the core inner-loop lifecycle: **develop → test → build → secure**.
+You watched a real app go from **2 critical and 26 high CVEs on the `node:18` base** to a smaller, hardened image with the critical and high vulnerabilities eliminated — without changing a line of application code. Then you ran that image with the runtime hardened: non-root, read-only filesystem, dropped capabilities. And you saw how to bake continuous scanning into CI so the same posture holds for every commit.
 
-Next, we shift gears and add **local AI** to the catalog service. 🤖
+Five practices, one app, measurable wins each time.
+
+> 🚀 **What's next** — there are three more security best practices and a full **Docker Hardened Images (DHI)** migration story (signed SBOMs, VEX, FIPS, SLSA provenance) covered in the dedicated *Container Security* labspace at [github.com/ajeetraina/labspace-container-security](https://github.com/ajeetraina/labspace-container-security). If this lab clicked, that's where you go deeper.
