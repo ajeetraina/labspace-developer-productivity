@@ -38,6 +38,7 @@ Other labs leave containers running on the same ports this stack needs — espec
 docker rm -f $(docker ps -aq --filter "name=postgres" --filter "name=catalog-service-node" --filter "name=catalog-service-node-chatbot") 2>/dev/null; \
 docker rm -f postgres1 postgres2 postgres3 2>/dev/null; \
 echo "Cleaned up."
+cd ~/project/catalog-service-node-chatbot && docker compose down --remove-orphans
 ```
 
 > 💡 The rule of thumb for this workshop: only one application stack runs at a time. Each lab's app reuses the same ports, so clear the previous one before starting the next.
