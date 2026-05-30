@@ -50,6 +50,7 @@ npm install
 npm run dev
 ```
 
+Keep the terminal up and running. 
 Once it's up, open the **Web Client** tab (or :tabLink[open it here]{href="http://localhost:5173" title="Web Client"}) at [http://localhost:5173](http://localhost:5173) and **create a few products**.
 
 ## Verify the data landed in Postgres
