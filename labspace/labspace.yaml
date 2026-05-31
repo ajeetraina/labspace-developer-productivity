@@ -31,7 +31,9 @@ sections:
     contentPath: 07-model-runner.md
   - title: "Lab 8 · Catalog + MCP"
     contentPath: 08-mcp.md
-  - title: Conclusion
+  - title: "Lab 9. Docker Offload"
+    contentPath: 09-offload.md
+  - title: "10. Conclusion"
     contentPath: 09-conclusion.md
 
 # Services are used to add default tabs in the Labspace interface.
