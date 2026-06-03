@@ -83,6 +83,7 @@ You're working with `catalog-service:v1.1` from Lab 5 — built from the patched
 Quick vulnerability overview:
 
 ```bash
+docker build -t catalog-service:v1.1 .
 docker scout quickview catalog-service:v1.1
 ```
 
