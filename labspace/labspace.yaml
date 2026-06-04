@@ -40,7 +40,7 @@ sections:
   - title: "Lab 12 · Using Built-in tools"
     contentPath: 12-using-builtin-tools.md
   - title: "Lab 13 · Docker Agents and MCP"
-    contentPath: 13-using-mcp.md
+    contentPath: 13-docker-agents-mcp.md
   - title: "Lab 14 · Using Docker Model Runner"
     contentPath: 14-docker-agents-dmr.md
   - title: "Lab 15 · Using Product Catalog"
