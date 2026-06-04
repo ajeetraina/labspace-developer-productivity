@@ -33,6 +33,19 @@ sections:
     contentPath: 08-mcp.md
   - title: "Lab 9 · Conclusion"
     contentPath: 09-conclusion.md
+  - title: "Lab 10 · Docker Agent"
+    contentPath: 10-docker-agents.md
+  - title: "Lab 11 · Getting Started with Docker Agents"
+    contentPath: 11-getting-started-with-docker-agents.md
+  - title: "Lab 12 · Using Built-in tools"
+    contentPath: 12-using-builtin-tools.md
+  - title: "Lab 13 · Docker Agents and MCP"
+    contentPath: 13-using-mcp.md
+  - title: "Lab 14 · Using Docker Model Runner"
+    contentPath: 14-docker-agents-dmr.md
+  - title: "Lab 15 · Using Product Catalog"
+    contentPath: 15-docker-agents-product-catalog.md
+    
 
 # Services are used to add default tabs in the Labspace interface.
 # The IDE is always present. Icons come from https://fonts.google.com/icons/
